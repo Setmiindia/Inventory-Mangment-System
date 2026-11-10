@@ -1,0 +1,195 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  ArrowLeftRight,
+  ArrowUpDown,
+  Boxes,
+  RefreshCw,
+  CircleHelp,
+  ClipboardList,
+  LayoutDashboard,
+  Home,
+  MapPin,
+  Menu,
+  PackageCheck,
+  Package,
+  Receipt,
+  BarChart3,
+  BookText,
+  ClipboardCheck,
+  Building2,
+  FolderTree,
+  ShipWheel,
+  ShieldCheck,
+  PackageOpen,
+  Undo2,
+  UserRound,
+  Calculator,
+  LineChart,
+  FileBarChart2,
+  ReceiptText,
+  Settings,
+  ShoppingCart,
+  Truck,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+
+// The server (layout) decides which links this person may see and sends only names.
+// Icons are picked here, so no component has to cross from server to client.
+export const ICONS: Record<string, LucideIcon> = {
+  home: Home,
+  items: Package,
+  stock: Boxes,
+  help: CircleHelp,
+  dashboard: LayoutDashboard,
+  entry: ArrowUpDown,
+  reorder: RefreshCw,
+  purchase: ClipboardList,
+  receipts: PackageCheck,
+  transfers: ArrowLeftRight,
+  billing: ShoppingCart,
+  bills: Receipt,
+  suppliers: Truck,
+  locations: MapPin,
+  users: Users,
+  settings: Settings,
+  reports: BarChart3,
+  ledger: BookText,
+  count: ClipboardCheck,
+  categories: FolderTree,
+  warehouses: Building2,
+  customers: UserRound,
+  import: ShipWheel,
+  qc: ShieldCheck,
+  picking: PackageOpen,
+  dispatch: Truck,
+  returns: Undo2,
+  reports2: FileBarChart2,
+  reports3: LineChart,
+  valuation: Calculator,
+};
+
+export type NavItem = { href: string; label: string; icon: string; group?: string; soon?: boolean };
+
+function NavList({ items, onPick }: { items: NavItem[]; onPick?: () => void }) {
+  const pathname = usePathname();
+  // Only the most specific match is marked (so /stock/entry does not also light up /stock).
+  const matches = (href: string) => { const h = href.split("?")[0]; return h === "/" ? pathname === "/" : pathname === h || pathname.startsWith(`${h}/`); };
+  const activeHref = items.filter((it) => matches(it.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
+  return (
+    <ul className="space-y-0.5">
+      {items.map((it, i) => {
+        const Icon = ICONS[it.icon] ?? ReceiptText;
+        const active = it.href === activeHref;
+        // A small heading whenever the group changes, so a long menu is easy to scan.
+        const heading = it.group && it.group !== items[i - 1]?.group ? it.group : null;
+        return (
+          <li key={it.href}>
+            {heading && (
+              <p className="mb-1 mt-4 px-3 text-xs font-semibold uppercase tracking-wider text-muted">{heading}</p>
+            )}
+            <Link
+              href={it.href}
+              onClick={onPick}
+              aria-current={active ? "page" : undefined}
+              title={it.soon ? "Coming soon" : undefined}
+              className={`${it.soon && !active ? "opacity-60 " : ""}flex min-h-11 items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium transition lg:min-h-9 ${
+                active
+                  ? "bg-[var(--sidebar-active)] text-white shadow-sm"
+                  : "text-[var(--sidebar-text)] hover:bg-brand-soft"
+              }`}
+            >
+              <Icon size={18} aria-hidden className={active ? "" : "text-muted"} />
+              <span className="min-w-0 flex-1 truncate">{it.label}</span>
+
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// Desktop sidebar list.
+export function NavLinks({ items }: { items: NavItem[] }) {
+  return <NavList items={items} />;
+}
+
+// Phone: a menu button that opens the same list over the page.
+export function MobileMenu({ items, openLabel = "Open menu", closeLabel = "Close menu" }: { items: NavItem[]; openLabel?: string; closeLabel?: string }) {
+  const [open, setOpen] = useState(false);
+  const openRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  // Keyboard users: Escape closes the menu, focus moves into it, and goes back to the menu button afterwards.
+  useEffect(() => {
+    if (!open) return;
+    const trigger = openRef.current;
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); trigger?.focus(); };
+  }, [open]);
+  return (
+    <>
+      <button
+        ref={openRef}
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={openLabel}
+        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted hover:bg-surface-muted lg:hidden"
+      >
+        <Menu size={20} aria-hidden className="mx-auto" />
+      </button>
+      {open && (
+        <div role="dialog" aria-modal="true" aria-label={openLabel} className="fixed inset-0 z-40 lg:hidden print:hidden">
+          <button type="button" aria-label={closeLabel} onClick={() => setOpen(false)} className="absolute inset-0 bg-black/50" />
+          <aside className="absolute inset-y-0 left-0 w-72 max-w-[85vw] overflow-y-auto bg-[var(--sidebar)] p-3 text-[var(--sidebar-text)] shadow-2xl">
+            <div className="mb-3 flex items-center justify-between px-1">
+              <Image src="/brand/setmi-round-192.png" alt="SETMI INDIA" width={56} height={56} className="h-14 w-14" />
+              <button ref={closeRef} type="button" onClick={() => setOpen(false)} aria-label={closeLabel} className="p-3">
+                <X size={20} aria-hidden />
+              </button>
+            </div>
+            <NavList items={items} onPick={() => setOpen(false)} />
+          </aside>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Phone only: a bar at the bottom with the four things used most (the first four that this person may open),
+// so staff at the counter or in the godown do not have to open the menu each time.
+const BOTTOM_PREFERENCE = ["/dashboard", "/", "/receipts", "/stock/entry", "/billing", "/stock", "/items", "/bills", "/transfers"];
+export function BottomBar({ items }: { items: NavItem[] }) {
+  const pathname = usePathname();
+  const chosen = BOTTOM_PREFERENCE.map((h) => items.find((i) => i.href === h)).filter((i): i is NavItem => !!i).slice(0, 4);
+  if (chosen.length < 2) return null;
+  const matches = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
+  const activeHref = chosen.filter((c) => matches(c.href)).sort((a, b) => b.href.length - a.href.length)[0]?.href;
+  return (
+    <nav aria-label="Quick links" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line bg-surface/95 backdrop-blur lg:hidden print:hidden">
+      {chosen.map((it) => {
+        const Icon = ICONS[it.icon] ?? ReceiptText;
+        const active = it.href === activeHref;
+        return (
+          <Link
+            key={it.href}
+            href={it.href}
+            aria-current={active ? "page" : undefined}
+            className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 px-1 text-xs font-medium ${active ? "text-[var(--brand-text)]" : "text-muted"}`}
+          >
+            <Icon size={20} aria-hidden />
+            <span className="max-w-full truncate">{it.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
