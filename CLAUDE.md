@@ -31,4 +31,5 @@ Also read `AGENTS.md`: this Next.js version differs from older versions, and its
 - Deleting files
 
 ## Commands
-Run inside `frontend/`: `npm run dev`, `npm run lint`, `npm run typecheck`, `npm run build`, `npm test`. Inside `backend/`: `npm run dev`, `npm run typecheck`, `npm run build`, `npm test`.
+Run inside `frontend/`: `npm run dev`, `npm run lint`, `npm run typecheck`, `npm run build`, `npm test`.
+Database: SQL migrations and tests live in `supabase/` (repo root). Supabase is the backend (login, database, Row Level Security); there is no separate API server.
