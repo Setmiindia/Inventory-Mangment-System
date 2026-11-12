@@ -8,7 +8,8 @@ import { createClient } from "@/lib/supabase/server";
 import { friendlyDbError } from "@/lib/db-errors";
 import { itemFromForm, parseBarcodes, parseTags, productExtrasFromForm } from "@/lib/validation/item";
 
-export type FormState = { ok: boolean; message: string } | null;
+// `values` hands the typed text back after an error, because React clears a form once its action finishes.
+export type FormState = { ok: boolean; message: string; values?: Record<string, string> } | null;
 const fail = (message: string): FormState => ({ ok: false, message });
 
 // ---------- create ----------
@@ -16,6 +17,9 @@ const fail = (message: string): FormState => ({ ok: false, message });
 // if the barcodes fail, the item stays and the user is sent to its page to add them again.
 export async function createItem(_prev: FormState, fd: FormData): Promise<FormState> {
   const user = await requirePermission("items.create");
+  const typed: Record<string, string> = {};
+  for (const [k, v] of fd.entries()) if (typeof v === "string") typed[k] = v;
+  const fail = (message: string): FormState => ({ ok: false, message, values: typed });
 
   const parsed = itemFromForm(fd);
   if (!parsed.success) return fail(parsed.error.issues[0].message);
@@ -207,6 +211,9 @@ export async function suggestSku(categoryId: string): Promise<{ ok: true; sku: s
 // meanwhile, zero rows match and the user is asked to reload.
 export async function updateItem(_prev: FormState, fd: FormData): Promise<FormState> {
   const user = await requirePermission("items.edit");
+  const typed: Record<string, string> = {};
+  for (const [k, v] of fd.entries()) if (typeof v === "string") typed[k] = v;
+  const fail = (message: string): FormState => ({ ok: false, message, values: typed });
 
   const id = z.uuid().safeParse(fd.get("id"));
   const expected = z.string().min(1).max(64).safeParse(fd.get("expectedUpdatedAt"));

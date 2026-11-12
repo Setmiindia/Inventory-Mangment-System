@@ -12,20 +12,22 @@ const field = "min-h-12 w-full rounded-xl border border-[var(--line-strong)] bg-
 // Add or edit a category in the side panel (the same form, with or without an id).
 export function CategoryForm({ category, cancelHref }: { category?: Category; cancelHref: string }) {
   const [state, formAction, pending] = useActionState<CategoryState, FormData>(saveCategory, null);
+  // After a failed save keep what the person typed (React empties the boxes when the action ends).
+  const typed = (name: string, fallback: string | null | undefined) => state?.values?.[name] ?? fallback ?? "";
   return (
     <form action={formAction} className="space-y-3">
       {category && <input type="hidden" name="id" value={category.id} />}
       <label className="block">
         <span className="mb-1 block text-xs text-muted">Category name *</span>
-        <input name="name" defaultValue={category?.name ?? ""} required maxLength={100} autoFocus className={field} />
+        <input name="name" defaultValue={typed("name", category?.name)} required maxLength={100} autoFocus className={field} />
       </label>
       <label className="block">
-        <span className="mb-1 block text-xs text-muted">Category code (optional, e.g. CON)</span>
-        <input name="code" defaultValue={category?.code ?? ""} maxLength={12} autoCapitalize="characters" className={`${field} font-mono uppercase`} />
+        <span className="mb-1 block text-xs text-muted">Category code (optional)</span>
+        <input name="code" defaultValue={typed("code", category?.code)} maxLength={12} autoCapitalize="characters" autoComplete="off" placeholder="e.g. CON" className={`${field} font-mono uppercase placeholder:normal-case`} />
       </label>
       <label className="block">
         <span className="mb-1 block text-xs text-muted">Description (optional)</span>
-        <textarea name="description" defaultValue={category?.description ?? ""} maxLength={300} rows={3} className={`${field} py-2`} />
+        <textarea name="description" defaultValue={typed("description", category?.description)} maxLength={300} rows={3} className={`${field} py-2`} />
       </label>
       {category && (
         <label className="flex min-h-11 items-center gap-3 text-sm font-medium">

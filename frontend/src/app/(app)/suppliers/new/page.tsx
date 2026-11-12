@@ -1,16 +1,20 @@
-import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
+import { streamed } from "@/components/streamed";
 import { requirePermission } from "@/lib/auth";
 import { SupplierForm } from "../supplier-form";
 
-export default async function NewSupplierPage() {
+export default streamed(async function NewSupplierPage() {
   await requirePermission("suppliers.manage");
   return (
-    <main className="space-y-4">
-      <p className="text-sm"><Link href="/suppliers" className="text-blue-700 underline">Suppliers</Link> / New</p>
-      <h1 className="text-xl font-semibold">New supplier</h1>
+    <main className="space-y-5">
+      <PageHeader
+        crumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Master Data" }, { label: "Suppliers", href: "/suppliers" }, { label: "Add Supplier" }]}
+        title="Add Supplier"
+        subtitle="Add a supplier you buy from. Only the name is needed; you can fill the rest later."
+      />
       <SupplierForm />
     </main>
   );
-}
+});
 
 export const metadata = { title: "Add Supplier" };

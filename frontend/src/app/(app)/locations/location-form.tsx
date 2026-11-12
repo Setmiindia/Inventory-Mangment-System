@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { CheckCircle2, Store, TriangleAlert, Warehouse } from "lucide-react";
+import { CheckCircle2, Loader2, Save, Store, TriangleAlert, Warehouse } from "lucide-react";
 import { saveLocation, setLocationActive, type LocationState } from "./actions";
 import { cardClass, dangerButton, inputClass, labelClass, primaryButton, secondaryButton } from "@/lib/ui";
 
@@ -119,6 +119,7 @@ export function LocationForm({ location }: { location?: LocationValues }) {
 
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" disabled={pending} className={primaryButton}>
+          {pending ? <Loader2 size={16} className="animate-spin" aria-hidden /> : <Save size={16} aria-hidden />}
           {pending ? "Saving..." : location ? "Save changes" : "Create warehouse"}
         </button>
         <Link href={location ? `/locations?sel=${location.id}` : "/locations"} className={secondaryButton}>Cancel</Link>

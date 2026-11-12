@@ -1,3 +1,7 @@
+import { Badge } from "@/components/badge";
+import { PageHeader } from "@/components/page-header";
+import { streamed } from "@/components/streamed";
+import { cardClass, secondaryButton } from "@/lib/ui";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
@@ -12,7 +16,7 @@ import { MOVEMENT_LABELS } from "@/lib/validation/stock";
 const qtyText = (n: number) => Number(n).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 const when = (iso: string) => new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
 
-export default async function ItemPage({
+export default streamed(async function ItemPage({
   params,
   searchParams,
 }: {
@@ -66,26 +70,22 @@ export default async function ItemPage({
   const canEdit = can(user, "items.edit");
 
   return (
-    <main className="space-y-6">
-      <p className="text-sm">
-        <Link href="/items" className="text-blue-700 underline">Products / SKU</Link> / {item.internal_item_code}
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">{item.item_name}</h1>
-        {!item.is_active && (
-          <span className="rounded border border-amber-500 px-2 py-0.5 text-xs">Archived</span>
-        )}
-      </div>
+    <main className="space-y-5">
+      <PageHeader
+        crumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Products / SKU", href: "/items" }, { label: item.internal_item_code }]}
+        title={item.item_name}
+        subtitle={`Code ${item.internal_item_code}${item.is_active ? "" : ". This product is inactive: it cannot be put on new orders or bills."}`}
+        badges={<Badge tone={item.is_active ? "green" : "amber"}>{item.is_active ? "Active" : "Inactive"}</Badge>}
+        actions={<>
+          {can(user, "items.create") && <Link href={`/items/new?from=${item.id}`} className={secondaryButton}>Duplicate</Link>}
+          <Link href={`/items/${item.id}/labels`} className={secondaryButton}>Print barcode</Link>
+          <Link href="/items" className={secondaryButton}>Back to products</Link>
+        </>}
+      />
 
-      <div className="flex flex-wrap gap-2">
-        {can(user, "items.create") && <Link href={`/items/new?from=${item.id}`} className="inline-flex min-h-10 items-center rounded-lg border border-line bg-surface px-3 text-sm font-medium hover:bg-surface-muted">Duplicate</Link>}
-        <Link href={`/items/${item.id}/labels`} className="inline-flex min-h-10 items-center rounded-lg border border-line bg-surface px-3 text-sm font-medium hover:bg-surface-muted">Print barcode</Link>
-        <Link href={`/items?q=${encodeURIComponent(item.internal_item_code)}`} className="inline-flex min-h-10 items-center rounded-lg border border-line bg-surface px-3 text-sm font-medium hover:bg-surface-muted">Back to list</Link>
-      </div>
-
-      <section className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-xl border border-line bg-surface p-4">
-          <h2 className="mb-2 text-sm font-semibold">Stock now: {qtyText(totalQty)} {item.unit}</h2>
+      <section className="grid max-w-5xl gap-4 md:grid-cols-2">
+        <div className={`${cardClass} !p-5`}>
+          <h2 className="mb-2 text-base font-semibold">Stock now: {qtyText(totalQty)} {item.unit}</h2>
           {(stockRows ?? []).length === 0 ? <p className="text-sm text-muted">No stock record yet.</p> : (
             <ul className="divide-y divide-line text-sm">
               {(stockRows ?? []).map((r) => (
@@ -97,8 +97,8 @@ export default async function ItemPage({
             </ul>
           )}
         </div>
-        <div className="rounded-xl border border-line bg-surface p-4">
-          <h2 className="mb-2 text-sm font-semibold">Last stock movements</h2>
+        <div className={`${cardClass} !p-5`}>
+          <h2 className="mb-2 text-base font-semibold">Last stock movements</h2>
           {(moves ?? []).length === 0 ? <p className="text-sm text-muted">No stock movement yet.</p> : (
             <ul className="divide-y divide-line text-sm">
               {((moves ?? []) as unknown as { id: number; quantity: number; movement_type: string; created_at: string; from_loc: { code: string } | null; to_loc: { code: string } | null }[]).map((m) => (
@@ -113,7 +113,7 @@ export default async function ItemPage({
       </section>
 
       {warn === "barcodes" && (
-        <p role="alert" className="rounded border border-amber-500 p-3 text-sm">
+        <p role="alert" className="max-w-5xl rounded-lg border border-amber-500 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
           The item was created, but its barcodes were not saved (a barcode may already belong to another item).
           Add them below.
         </p>
@@ -151,7 +151,7 @@ export default async function ItemPage({
           }}
         />
       ) : (
-        <dl className="grid gap-2 text-sm sm:grid-cols-2">
+        <dl className={`${cardClass} grid max-w-5xl gap-3 !p-5 text-sm sm:grid-cols-2`}>
           <div><dt className="font-medium">Internal Item Code</dt><dd>{item.internal_item_code}</dd></div>
           <div><dt className="font-medium">Import Item Code</dt><dd>{item.import_item_code ?? ""}</dd></div>
           <div><dt className="font-medium">Item Name</dt><dd>{item.item_name}</dd></div>
@@ -172,4 +172,4 @@ export default async function ItemPage({
       {can(user, "items.archive") && <ArchiveControl itemId={item.id} isActive={item.is_active} />}
     </main>
   );
-}
+})

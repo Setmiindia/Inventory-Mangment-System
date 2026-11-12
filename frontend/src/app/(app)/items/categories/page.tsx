@@ -1,3 +1,4 @@
+import { streamed } from "@/components/streamed";
 import Link from "next/link";
 import {
   Archive, ChevronLeft, ChevronRight, Eye, Layers, Package, Power, Search, SquarePen, Tag, X, CheckCircle2, type LucideIcon,
@@ -29,7 +30,7 @@ const date = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { timeZo
 const dateTime = (iso: string) => new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
 const n = (v: number) => Number(v).toLocaleString("en-IN");
 
-export default async function CategoriesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+export default streamed(async function CategoriesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requirePermission("categories.manage");
   const sp = await searchParams;
 
@@ -196,7 +197,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
       </div>
     </main>
   );
-}
+})
 
 function PageLink({ href, label, active, disabled, children }: { href?: string; label: string; active?: boolean; disabled?: boolean; children: React.ReactNode }) {
   const cls = `inline-flex h-10 min-w-10 items-center justify-center rounded-lg border px-2 text-sm font-medium ${

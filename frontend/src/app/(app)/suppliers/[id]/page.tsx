@@ -1,11 +1,14 @@
-import Link from "next/link";
+import { Badge } from "@/components/badge";
+import { PageHeader } from "@/components/page-header";
+import { streamed } from "@/components/streamed";
+import { cardClass } from "@/lib/ui";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { can, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { SupplierArchiveControl, SupplierForm } from "../supplier-form";
 
-export default async function SupplierPage({ params }: { params: Promise<{ id: string }> }) {
+export default streamed(async function SupplierPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const id = z.uuid().safeParse((await params).id);
   if (!id.success) notFound();
@@ -16,13 +19,13 @@ export default async function SupplierPage({ params }: { params: Promise<{ id: s
   const canManage = can(user, "suppliers.manage");
 
   return (
-    <main className="space-y-6">
-      <p className="text-sm"><Link href="/suppliers" className="text-blue-700 underline">Suppliers</Link> / {s.name}</p>
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">{s.name}</h1>
-        <span className="rounded border border-neutral-400 px-2 py-0.5 text-xs">{s.supplier_type}</span>
-        {!s.is_active && <span className="rounded border border-amber-500 px-2 py-0.5 text-xs">Archived</span>}
-      </div>
+    <main className="space-y-5">
+      <PageHeader
+        crumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Master Data" }, { label: "Suppliers", href: "/suppliers" }, { label: s.name }]}
+        title={s.name}
+        subtitle={canManage ? "Change the details below and press Save changes." : undefined}
+        badges={<><Badge tone="brand">{s.supplier_type === "IMPORT" ? "Import" : "Local"}</Badge><Badge tone={s.is_active ? "green" : "amber"}>{s.is_active ? "Active" : "Archived"}</Badge></>}
+      />
       {canManage ? (
         <SupplierForm
           supplier={{
@@ -32,7 +35,7 @@ export default async function SupplierPage({ params }: { params: Promise<{ id: s
           }}
         />
       ) : (
-        <dl className="grid gap-2 text-sm sm:grid-cols-2">
+        <dl className={`${cardClass} grid max-w-3xl gap-3 !p-5 text-sm sm:grid-cols-2`}>
           <div><dt className="font-medium">Contact person</dt><dd>{s.contact_person ?? ""}</dd></div>
           <div><dt className="font-medium">Phone</dt><dd>{s.phone ?? ""}</dd></div>
           <div><dt className="font-medium">Email</dt><dd>{s.email ?? ""}</dd></div>
@@ -43,4 +46,4 @@ export default async function SupplierPage({ params }: { params: Promise<{ id: s
       {canManage && <SupplierArchiveControl id={s.id} isActive={s.is_active} />}
     </main>
   );
-}
+})

@@ -1,3 +1,4 @@
+import { streamed } from "@/components/streamed";
 import Link from "next/link";
 import {
   Archive, ArrowDownToLine, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Eye, IndianRupee, Mail, MapPin, Phone, Power, Search, ShoppingCart, SquarePen,
@@ -49,7 +50,7 @@ function Avatar({ name, size = 36 }: { name: string; size?: number }) {
 }
 const TypeBadge = ({ type }: { type: Type }) => <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${TYPE_STYLE[type]}`}>{CUSTOMER_TYPE_LABEL[type]}</span>;
 
-export default async function CustomersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+export default streamed(async function CustomersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const user = await requireAnyPermission("customers.view", "customers.manage");
   const sp = await searchParams;
 
@@ -206,7 +207,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       </div>
     </main>
   );
-}
+})
 
 function FilterSelect({ label, name, value, children }: { label: string; name: string; value: string; children: React.ReactNode }) {
   return (

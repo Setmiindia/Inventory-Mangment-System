@@ -71,39 +71,59 @@ export function BinRowMenu({ id, blocked, viewHref, editHref }: { id: string; bl
   );
 }
 
-type Bin = { id: string; locationId: string; rack: string; level: string; binNo: string; binType: string; capacity: number | null; notes: string | null; blocked: boolean; blockReason: string | null };
+type Bin = { id: string; locationId: string; floor: string | null; rack: string; level: string; binNo: string; binType: string; capacity: number | null; notes: string | null; blocked: boolean; blockReason: string | null };
+
+// A single digit gets a leading zero, the same rule the server uses (1 becomes 01), so the preview matches the real code.
+const part = (v: string) => { const t = v.trim().toUpperCase(); return /^[0-9]$/.test(t) ? `0${t}` : t; };
 
 // Add or edit a rack / shelf / bin in the side panel.
 export function BinForm({ bin, places, defaultPlace, cancelHref }: { bin?: Bin; places: { id: string; code: string; name: string }[]; defaultPlace: string; cancelHref: string }) {
   const [state, formAction, pending] = useActionState<BinState, FormData>(saveBin, null);
+  // After a failed save keep what the person typed (React empties the boxes when the action ends).
+  const typed = (name: string, fallback: string | number | null | undefined) => state?.values?.[name] ?? fallback ?? "";
   const [blocked, setBlocked] = useState(bin?.blocked ?? false);
+  const [placeId, setPlaceId] = useState(bin?.locationId ?? defaultPlace);
+  const [floor, setFloor] = useState(bin?.floor ?? "");
+  const [rack, setRack] = useState(bin?.rack ?? "");
+  const [level, setLevel] = useState(bin?.level ?? "");
+  const [binNo, setBinNo] = useState(bin?.binNo ?? "");
+  const placeCode = places.find((p) => p.id === placeId)?.code.replace(/\s+/g, "").toUpperCase() ?? "";
+  // The database builds the real code; this is the same recipe, so the person sees it before saving.
+  const preview = [placeCode, floor.trim() ? `F${floor.trim().toUpperCase()}` : "", part(rack) || "?", part(level) || "?", part(binNo) || "?"].filter(Boolean).join("-");
   return (
     <form action={formAction} className="space-y-3">
       {bin && <input type="hidden" name="id" value={bin.id} />}
       <label className="block">
         <span className="mb-1 block text-xs text-muted">Warehouse / shop *</span>
-        <select name="locationId" required defaultValue={bin?.locationId ?? defaultPlace} className={field}>
+        <select name="locationId" required value={placeId} onChange={(e) => setPlaceId(e.target.value)} className={field}>
           {places.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}
         </select>
       </label>
+      <label className="block">
+        <span className="mb-1 block text-xs text-muted">Floor (optional)</span>
+        <input name="floor" list="floor-options" maxLength={4} value={floor} onChange={(e) => setFloor(e.target.value)} autoCapitalize="characters" autoComplete="off" placeholder="e.g. G, 1, 2, B1"
+          aria-describedby="floor-hint" className={`${field} font-mono uppercase placeholder:normal-case`} />
+        <datalist id="floor-options"><option value="G">Ground floor</option><option value="1">Floor 1</option><option value="2">Floor 2</option><option value="3">Floor 3</option><option value="B1">Basement 1</option></datalist>
+        <span id="floor-hint" className="mt-1 block text-xs text-muted">G = ground, 1, 2, 3 = upper floors, B1 = basement. Leave empty if the place has one floor.</span>
+      </label>
       <div className="grid grid-cols-3 gap-2">
         <label className="block"><span className="mb-1 block text-xs text-muted">Rack *</span>
-          <input name="rack" required maxLength={6} defaultValue={bin?.rack ?? ""} autoCapitalize="characters" placeholder="A" className={`${field} font-mono uppercase`} /></label>
+          <input name="rack" required maxLength={6} value={rack} onChange={(e) => setRack(e.target.value)} autoCapitalize="characters" autoComplete="off" placeholder="A" className={`${field} font-mono uppercase placeholder:normal-case`} /></label>
         <label className="block"><span className="mb-1 block text-xs text-muted">Level *</span>
-          <input name="level" required maxLength={6} defaultValue={bin?.level ?? ""} autoCapitalize="characters" placeholder="01" className={`${field} font-mono uppercase`} /></label>
+          <input name="level" required maxLength={6} value={level} onChange={(e) => setLevel(e.target.value)} autoCapitalize="characters" autoComplete="off" placeholder="01" className={`${field} font-mono uppercase`} /></label>
         <label className="block"><span className="mb-1 block text-xs text-muted">Bin *</span>
-          <input name="binNo" required maxLength={6} defaultValue={bin?.binNo ?? ""} autoCapitalize="characters" placeholder="01" className={`${field} font-mono uppercase`} /></label>
+          <input name="binNo" required maxLength={6} value={binNo} onChange={(e) => setBinNo(e.target.value)} autoCapitalize="characters" autoComplete="off" placeholder="01" className={`${field} font-mono uppercase`} /></label>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <label className="block"><span className="mb-1 block text-xs text-muted">Location type</span>
-          <select name="binType" defaultValue={bin?.binType ?? "BIN"} className={field}>
+          <select name="binType" defaultValue={String(typed("binType", bin?.binType ?? "BIN"))} className={field}>
             <option value="BIN">Bin</option><option value="SHELF">Shelf</option><option value="PALLET">Pallet</option>
           </select></label>
         <label className="block"><span className="mb-1 block text-xs text-muted">Capacity (units, optional)</span>
-          <input name="capacity" type="number" min={0} step="any" inputMode="decimal" defaultValue={bin?.capacity ?? ""} className={field} /></label>
+          <input name="capacity" type="number" min={0} step="any" inputMode="decimal" defaultValue={typed("capacity", bin?.capacity)} className={field} /></label>
       </div>
       <label className="block"><span className="mb-1 block text-xs text-muted">Notes (optional)</span>
-        <textarea name="notes" rows={2} maxLength={500} defaultValue={bin?.notes ?? ""} className={`${field} py-2`} /></label>
+        <textarea name="notes" rows={2} maxLength={500} defaultValue={typed("notes", bin?.notes)} className={`${field} py-2`} /></label>
       {bin && (
         <>
           <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
@@ -111,11 +131,11 @@ export function BinForm({ bin, places, defaultPlace, cancelHref }: { bin?: Bin; 
           </label>
           {blocked && (
             <label className="block"><span className="mb-1 block text-xs text-muted">Reason (optional)</span>
-              <input name="blockReason" maxLength={200} defaultValue={bin.blockReason ?? ""} className={field} /></label>
+              <input name="blockReason" maxLength={200} defaultValue={typed("blockReason", bin.blockReason)} className={field} /></label>
           )}
         </>
       )}
-      <p className="text-xs text-muted">The location code is made for you, for example <span className="font-mono">WH01-A-01-01</span>.</p>
+      <p className="rounded-lg bg-surface-muted px-3 py-2 text-xs text-muted">The location code is made for you: <span className="font-mono font-semibold text-[var(--foreground)]">{preview}</span></p>
       {state && !state.ok && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-2 text-sm text-red-700">{state.message}</p>}
       <div className="grid grid-cols-2 gap-2">
         <Link href={cancelHref} className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line bg-surface text-sm font-semibold hover:bg-surface-muted">Cancel</Link>

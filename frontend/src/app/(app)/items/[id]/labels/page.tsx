@@ -1,3 +1,4 @@
+import { streamed } from "@/components/streamed";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
@@ -16,7 +17,7 @@ const clampInt = (raw: string | undefined, min: number, max: number, fallback: n
   return Number.isFinite(n) ? Math.min(Math.max(n, min), max) : fallback;
 };
 
-export default async function LabelsPage({
+export default streamed(async function LabelsPage({
   params,
   searchParams,
 }: {
@@ -107,4 +108,4 @@ export default async function LabelsPage({
       </div>
     </main>
   );
-}
+})

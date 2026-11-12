@@ -248,3 +248,30 @@ main table.dash-table td span.inline-flex {
 main table.dash-table th {
   font-size: 0.6875rem;
 }
+
+/* ---- Soft motion (CSS only: no extra JavaScript, only opacity and transform, so pages stay fast) ----
+   The blocks of a page rise one after another, table rows follow, and messages pop in.
+   Switched off for people who chose "reduce motion" (also by the rule above). */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.96) translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  main > * { animation: rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  main > *:nth-child(2) { animation-delay: 0.04s; }
+  main > *:nth-child(3) { animation-delay: 0.08s; }
+  main > *:nth-child(4) { animation-delay: 0.12s; }
+  main > *:nth-child(5) { animation-delay: 0.16s; }
+  main > *:nth-child(n + 6) { animation-delay: 0.2s; }
+  main table tbody tr { animation: rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  main table tbody tr:nth-child(2) { animation-delay: 0.03s; }
+  main table tbody tr:nth-child(3) { animation-delay: 0.06s; }
+  main table tbody tr:nth-child(4) { animation-delay: 0.09s; }
+  main table tbody tr:nth-child(5) { animation-delay: 0.12s; }
+  main table tbody tr:nth-child(n + 6) { animation-delay: 0.15s; }
+  main [role="status"], main [role="alert"] { animation: pop 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+}

@@ -1,8 +1,9 @@
+import { streamed } from "@/components/streamed";
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth";
 import { ImportWizard } from "./import-wizard";
 
-export default async function ImportPage() {
+export default streamed(async function ImportPage() {
   await requirePermission("items.import");
 
   return (
@@ -32,6 +33,6 @@ export default async function ImportPage() {
       <ImportWizard />
     </main>
   );
-}
+})
 
 export const metadata = { title: "Import Items" };

@@ -35,3 +35,15 @@ test("type, capacity and place rules", () => {
   assert.equal(binSchema.safeParse({ ...ok, locationId: "nope" }).success, false);
   assert.equal(binSchema.safeParse({ ...ok, notes: "n".repeat(501) }).success, false);
 });
+
+test("floor is optional, upper-cased, 1 to 4 letters or digits", () => {
+  const f = (floor: unknown) => binSchema.safeParse({ ...ok, floor });
+  const noFloor = f(undefined);
+  assert.equal(noFloor.success && noFloor.data.floor, null);
+  const blank = f("  ");
+  assert.equal(blank.success && blank.data.floor, null);
+  const b1 = f(" b1 ");
+  assert.equal(b1.success && b1.data.floor, "B1");
+  assert.equal(f("GROUND").success, false);
+  assert.equal(f("1-2").success, false);
+});

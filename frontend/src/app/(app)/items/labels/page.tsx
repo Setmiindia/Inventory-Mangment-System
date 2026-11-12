@@ -1,3 +1,4 @@
+import { streamed } from "@/components/streamed";
 import Link from "next/link";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
@@ -12,7 +13,7 @@ type SearchParams = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 // Barcode labels for several products at once (ticked in the product list). One label per product per copy.
-export default async function BulkLabelsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+export default streamed(async function BulkLabelsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requirePermission("items.view");
   const sp = await searchParams;
   const ids = [...new Set((first(sp.ids) ?? "").split(",").map((s) => s.trim()).filter(Boolean))].slice(0, 100);
@@ -68,6 +69,6 @@ export default async function BulkLabelsPage({ searchParams }: { searchParams: P
       </div>
     </main>
   );
-}
+})
 
 export const metadata = { title: "Print Labels" };

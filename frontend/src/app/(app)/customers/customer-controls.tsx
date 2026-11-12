@@ -81,10 +81,12 @@ type Customer = {
 // Add or edit a customer in the side panel.
 export function CustomerForm({ customer, cancelHref }: { customer?: Customer; cancelHref: string }) {
   const [state, formAction, pending] = useActionState<CustomerState, FormData>(saveCustomer, null);
+  // After a failed save keep what the person typed (React empties the boxes when the action ends).
+  const typed = (name: string, fallback: string | number | null | undefined) => state?.values?.[name] ?? fallback ?? "";
   const text = (name: string, label: string, value: string | null | undefined, extra: { max: number; type?: string; required?: boolean; upper?: boolean }) => (
     <label className="block">
       <span className="mb-1 block text-xs text-muted">{label}{extra.required ? " *" : ""}</span>
-      <input name={name} type={extra.type ?? "text"} required={extra.required} maxLength={extra.max} defaultValue={value ?? ""} className={`${field} ${extra.upper ? "font-mono uppercase" : ""}`} />
+      <input name={name} type={extra.type ?? "text"} required={extra.required} maxLength={extra.max} autoComplete="off" defaultValue={typed(name, value)} className={`${field} ${extra.upper ? "font-mono uppercase" : ""}`} />
     </label>
   );
   return (
@@ -93,7 +95,7 @@ export function CustomerForm({ customer, cancelHref }: { customer?: Customer; ca
       {text("name", "Company / customer name", customer?.name, { max: 150, required: true })}
       <label className="block">
         <span className="mb-1 block text-xs text-muted">Customer type</span>
-        <select name="customerType" defaultValue={customer?.customerType ?? "RETAILER"} className={field}>
+        <select name="customerType" defaultValue={String(typed("customerType", customer?.customerType ?? "RETAILER"))} className={field}>
           {CUSTOMER_TYPES.map((t) => <option key={t} value={t}>{CUSTOMER_TYPE_LABEL[t]}</option>)}
         </select>
       </label>
@@ -104,18 +106,18 @@ export function CustomerForm({ customer, cancelHref }: { customer?: Customer; ca
       </div>
       {text("email", "Email", customer?.email, { max: 150, type: "email" })}
       <label className="block"><span className="mb-1 block text-xs text-muted">Address</span>
-        <textarea name="address" rows={2} maxLength={500} defaultValue={customer?.address ?? ""} className={`${field} py-2`} /></label>
+        <textarea name="address" rows={2} maxLength={500} defaultValue={typed("address", customer?.address)} className={`${field} py-2`} /></label>
       <div className="grid grid-cols-2 gap-2">
         {text("city", "City", customer?.city, { max: 60 })}
         {text("state", "State", customer?.state, { max: 60 })}
       </div>
       <div className="grid grid-cols-2 gap-2">
         <label className="block"><span className="mb-1 block text-xs text-muted">Credit limit (a note)</span>
-          <input name="creditLimit" type="number" min={0} step="any" inputMode="decimal" defaultValue={customer?.creditLimit ?? ""} className={field} /></label>
+          <input name="creditLimit" type="number" min={0} step="any" inputMode="decimal" defaultValue={typed("creditLimit", customer?.creditLimit)} className={field} /></label>
         {text("paymentTerms", "Payment terms", customer?.paymentTerms, { max: 60 })}
       </div>
       <label className="block"><span className="mb-1 block text-xs text-muted">Notes</span>
-        <textarea name="notes" rows={2} maxLength={1000} defaultValue={customer?.notes ?? ""} className={`${field} py-2`} /></label>
+        <textarea name="notes" rows={2} maxLength={1000} defaultValue={typed("notes", customer?.notes)} className={`${field} py-2`} /></label>
       {customer && (
         <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
           <input type="checkbox" name="isActive" defaultChecked={customer.isActive} className="h-5 w-5 accent-[var(--brand)]" /> Active

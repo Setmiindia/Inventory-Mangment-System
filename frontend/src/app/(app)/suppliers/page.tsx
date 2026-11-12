@@ -1,3 +1,4 @@
+import { streamed } from "@/components/streamed";
 import Link from "next/link";
 import {
   Archive, ArrowDownToLine, Building2, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock, Eye, Mail, MapPin, PackageCheck, Phone, Search,
@@ -37,7 +38,7 @@ function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   return <span aria-hidden className="inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white" style={{ background: color, width: size, height: size, fontSize: size * 0.38 }}>{letters}</span>;
 }
 
-export default async function SuppliersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+export default streamed(async function SuppliersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const user = await requireAnyPermission("suppliers.view", "suppliers.manage");
   const sp = await searchParams;
 
@@ -196,7 +197,7 @@ export default async function SuppliersPage({ searchParams }: { searchParams: Pr
       </div>
     </main>
   );
-}
+})
 
 function FilterSelect({ label, name, value, children }: { label: string; name: string; value: string; children: React.ReactNode }) {
   return (

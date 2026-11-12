@@ -7,7 +7,8 @@ import { requirePermission } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyDbError } from "@/lib/db-errors";
 
-export type CategoryState = { ok: boolean; message: string } | null;
+// `values` hands the typed text back after an error, because React clears a form once its action finishes.
+export type CategoryState = { ok: boolean; message: string; values?: Record<string, string> } | null;
 
 const schema = z.object({
   id: z.uuid().nullable(),
@@ -21,6 +22,9 @@ const schema = z.object({
 // One action for create (no id) and update (id). Needs categories.manage (the database checks it again).
 export async function saveCategory(_prev: CategoryState, fd: FormData): Promise<CategoryState> {
   await requirePermission("categories.manage");
+  const typed: Record<string, string> = {};
+  for (const [k, v] of fd.entries()) if (typeof v === "string") typed[k] = v;
+  const fail = (message: string): CategoryState => ({ ok: false, message, values: typed });
 
   const rawId = fd.get("id");
   const parsed = schema.safeParse({
@@ -30,7 +34,7 @@ export async function saveCategory(_prev: CategoryState, fd: FormData): Promise<
     description: String(fd.get("description") ?? ""),
     isActive: rawId ? fd.get("isActive") === "on" : true,
   });
-  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message };
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
   const v = parsed.data;
   const fields = { name: v.name, code: v.code || null, description: v.description || null };
 
@@ -41,10 +45,10 @@ export async function saveCategory(_prev: CategoryState, fd: FormData): Promise<
 
   if (result.error) {
     // A code that is already used by another category gets a plain message.
-    if (result.error.code === "23505" && result.error.message.includes("categories_code_uq")) return { ok: false, message: "This category code is already used." };
-    return { ok: false, message: friendlyDbError(result.error) };
+    if (result.error.code === "23505" && result.error.message.includes("categories_code_uq")) return fail("This category code is already used.");
+    return fail(friendlyDbError(result.error));
   }
-  if (!result.data || result.data.length === 0) return { ok: false, message: "Nothing was saved." };
+  if (!result.data || result.data.length === 0) return fail("Nothing was saved.");
 
   revalidatePath("/items/categories");
   redirect(`/items/categories?sel=${result.data[0].id}`);

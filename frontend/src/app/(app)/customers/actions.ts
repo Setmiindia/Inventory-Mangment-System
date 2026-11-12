@@ -8,13 +8,16 @@ import { createClient } from "@/lib/supabase/server";
 import { friendlyDbError } from "@/lib/db-errors";
 import { customerFromForm } from "@/lib/validation/customer";
 
-export type CustomerState = { ok: boolean; message: string } | null;
-const fail = (message: string): CustomerState => ({ ok: false, message });
+// `values` hands the typed text back after an error, because React clears a form once its action finishes.
+export type CustomerState = { ok: boolean; message: string; values?: Record<string, string> } | null;
 
 // Create (no id) or update (id). Needs customers.manage; the database checks it again.
 // The code (CUST-001...) is made by the database and never changes.
 export async function saveCustomer(_prev: CustomerState, fd: FormData): Promise<CustomerState> {
   await requirePermission("customers.manage");
+  const typed: Record<string, string> = {};
+  for (const [k, v] of fd.entries()) if (typeof v === "string") typed[k] = v;
+  const fail = (message: string): CustomerState => ({ ok: false, message, values: typed });
   const rawId = fd.get("id");
   const parsed = customerFromForm(fd, Boolean(rawId));
   if (!parsed.success) return fail(parsed.error.issues[0].message);

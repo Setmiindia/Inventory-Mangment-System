@@ -79,9 +79,9 @@ export function FileManager({
   }
 
   return (
-    <section className="space-y-4">
+    <section className="max-w-5xl space-y-4 rounded-xl border border-line bg-surface p-5 shadow-sm">
       <div>
-        <h2 className="mb-2 text-sm font-medium">Images ({images.length} of {MAX_IMAGES})</h2>
+        <h2 className="mb-2 text-base font-semibold">Images ({images.length} of {MAX_IMAGES})</h2>
         {images.length === 0 ? (
           <p className="text-sm text-neutral-500">No images yet.</p>
         ) : (
@@ -119,7 +119,7 @@ export function FileManager({
       </div>
 
       <div>
-        <h2 className="mb-2 text-sm font-medium">Datasheet</h2>
+        <h2 className="mb-2 text-base font-semibold">Datasheet</h2>
         {datasheet ? (
           <div className="flex items-center gap-3 text-sm">
             {datasheet.url ? (

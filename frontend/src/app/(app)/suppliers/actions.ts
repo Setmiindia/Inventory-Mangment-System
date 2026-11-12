@@ -8,13 +8,17 @@ import { createClient } from "@/lib/supabase/server";
 import { friendlyDbError } from "@/lib/db-errors";
 import { supplierFromForm } from "@/lib/validation/supplier";
 
-export type SupplierState = { ok: boolean; message: string } | null;
-const fail = (message: string): SupplierState => ({ ok: false, message });
+// `values` hands the typed text back after an error, because React clears a form once its action finishes.
+export type SupplierState = { ok: boolean; message: string; values?: Record<string, string> } | null;
+const plainFail = (message: string): SupplierState => ({ ok: false, message });
 
 // Needs suppliers.manage (the database checks it again). On update, expectedUpdatedAt stops
 // two people overwriting each other.
 export async function saveSupplier(_prev: SupplierState, fd: FormData): Promise<SupplierState> {
   await requirePermission("suppliers.manage");
+  const typed: Record<string, string> = {};
+  for (const [k, v] of fd.entries()) if (typeof v === "string") typed[k] = v;
+  const fail = (message: string): SupplierState => ({ ok: false, message, values: typed });
   const parsed = supplierFromForm(fd);
   if (!parsed.success) return fail(parsed.error.issues[0].message);
   const v = parsed.data;
@@ -45,6 +49,7 @@ export async function saveSupplier(_prev: SupplierState, fd: FormData): Promise<
 }
 
 export async function setSupplierActive(_prev: SupplierState, fd: FormData): Promise<SupplierState> {
+  const fail = plainFail;
   await requirePermission("suppliers.manage");
   const id = z.uuid().safeParse(fd.get("id"));
   if (!id.success) return fail("Invalid form data.");

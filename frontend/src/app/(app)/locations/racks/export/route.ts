@@ -9,6 +9,7 @@ const COLUMNS = [
   { key: "code", label: "Location code" },
   { key: "place_name", label: "Warehouse / shop" },
   { key: "city", label: "City" },
+  { key: "floor", label: "Floor" },
   { key: "rack", label: "Rack" },
   { key: "level", label: "Level" },
   { key: "bin_no", label: "Bin" },
@@ -30,10 +31,11 @@ export async function GET(request: Request) {
   const q = sanitizeSearch(sp.get("q") ?? undefined);
   const place = z.uuid().safeParse(sp.get("place")).data ?? null;
   const rack = /^[A-Z0-9]{1,6}$/.test(sp.get("rack") ?? "") ? sp.get("rack") : null;
+  const floor = /^([A-Z0-9]{1,4}|-)$/.test(sp.get("floor") ?? "") ? sp.get("floor") : null;
   const status = ["occupied", "available", "blocked"].includes(sp.get("status") ?? "") ? sp.get("status") : null;
 
   const supabase = await createClient();
-  const call = (offset: number) => supabase.rpc("bins_page", { p_q: q || null, p_location: place, p_rack: rack, p_status: status, p_limit: 100, p_offset: offset });
+  const call = (offset: number) => supabase.rpc("bins_page", { p_q: q || null, p_location: place, p_rack: rack, p_status: status, p_limit: 100, p_offset: offset, p_floor: floor });
   const first = await call(0);
   if (first.error || !first.data) return new Response("Could not build the file", { status: 500 });
   const rows = [...((first.data as { rows: Record<string, unknown>[] }).rows ?? [])];

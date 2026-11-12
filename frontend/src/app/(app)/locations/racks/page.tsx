@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   AlertTriangle, ArrowDownToLine, CheckCircle2, ChevronLeft, ChevronRight, Eye, Layers, Lock, LockOpen, PackageOpen, Search, SquarePen, X, MapPinned, X as XIcon, type LucideIcon,
 } from "lucide-react";
@@ -9,8 +10,10 @@ import { can, requireUser } from "@/lib/auth";
 import { friendlyDbError } from "@/lib/db-errors";
 import { createClient } from "@/lib/supabase/server";
 import { cardClass } from "@/lib/ui";
+import { floorLabel } from "@/lib/validation/bin";
 import { sanitizeSearch } from "@/lib/validation/item";
 import { RowsPerPage } from "../../items/item-controls";
+import { KpiSkeleton, TableSkeleton } from "../../items/items-table";
 import { removeItemFromBin, toggleBinBlocked } from "./actions";
 import { AddBinMenu, AssignForm, BinForm, BinRowMenu } from "./bin-controls";
 
@@ -21,14 +24,14 @@ const TABS = [["items", "Items"], ["notes", "Notes"]] as const;
 const STATUSES = ["occupied", "available", "blocked"] as const;
 
 type Row = {
-  id: string; code: string; location_id: string; place_code: string; place_name: string; city: string | null; rack: string; level: string; bin_no: string;
+  id: string; code: string; location_id: string; place_code: string; place_name: string; city: string | null; floor: string | null; rack: string; level: string; bin_no: string;
   type: "BIN" | "SHELF" | "PALLET"; capacity: number | null; blocked: boolean; items: number; qty: number; status: (typeof STATUSES)[number]; utilization: number | null;
 };
 type PageData = {
-  total: number; rows: Row[]; racks: string[]; places: { id: string; code: string; name: string }[];
+  total: number; rows: Row[]; racks: string[]; floors: string[]; places: { id: string; code: string; name: string }[];
   kpi: { total: number; occupied: number; available: number; blocked: number; new_month: number };
 };
-const EMPTY: PageData = { total: 0, rows: [], racks: [], places: [], kpi: { total: 0, occupied: 0, available: 0, blocked: 0, new_month: 0 } };
+const EMPTY: PageData = { total: 0, rows: [], racks: [], floors: [], places: [], kpi: { total: 0, occupied: 0, available: 0, blocked: 0, new_month: 0 } };
 
 const n = (v: number) => Number(v).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 const TYPE_LABEL = { BIN: "Bin", SHELF: "Shelf", PALLET: "Pallet" } as const;
@@ -37,13 +40,24 @@ const STATUS_TONE = { occupied: "green", available: "brand", blocked: "red" } as
 const STATUS_LABEL = { occupied: "Occupied", available: "Available", blocked: "Blocked" } as const;
 const barTone = (u: number) => (u >= 90 ? "bg-red-500" : u >= 70 ? "bg-amber-400" : "bg-[var(--brand)]");
 
-export default async function RacksPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+// The page reads nothing at request time; the session and the database are read inside <Suspense> (see the Warehouses page).
+export default function RacksPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  return (
+    <Suspense fallback={<main className="space-y-4"><KpiSkeleton /><TableSkeleton /></main>}>
+      <RacksContent searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function RacksContent({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const user = await requireUser();
   const sp = await searchParams;
 
   const q = sanitizeSearch(first(sp.q));
   const place = z.uuid().safeParse(first(sp.place)).data ?? "";
   const rack = /^[A-Z0-9]{1,6}$/.test(first(sp.rack) ?? "") ? first(sp.rack)! : "";
+  // "-" means bins that have no floor set
+  const floor = /^([A-Z0-9]{1,4}|-)$/.test(first(sp.floor) ?? "") ? first(sp.floor)! : "";
   const status = (STATUSES as readonly string[]).includes(first(sp.status) ?? "") ? first(sp.status)! : "all";
   const size = SIZES.includes(Number(first(sp.size))) ? Number(first(sp.size)) : 10;
   const page = Math.min(Math.max(parseInt(first(sp.page) ?? "1", 10) || 1, 1), 100000);
@@ -53,7 +67,7 @@ export default async function RacksPage({ searchParams }: { searchParams: Promis
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("bins_page", {
     p_q: q || null, p_location: place || null, p_rack: rack || null, p_status: status === "all" ? null : status,
-    p_limit: size, p_offset: (page - 1) * size,
+    p_limit: size, p_offset: (page - 1) * size, p_floor: floor || null,
   });
   const result = (data ?? EMPTY) as PageData;
   const rows = result.rows;
@@ -68,14 +82,14 @@ export default async function RacksPage({ searchParams }: { searchParams: Promis
   const keep = (extra: Record<string, string | number | undefined>) => {
     const params = new URLSearchParams();
     const base: Record<string, string | number | undefined> = {
-      q: q || undefined, place: place || undefined, rack: rack || undefined, status: status !== "all" ? status : undefined,
+      q: q || undefined, place: place || undefined, floor: floor || undefined, rack: rack || undefined, status: status !== "all" ? status : undefined,
       size: size !== 10 ? size : undefined, page: page > 1 ? page : undefined, sel: selParam, tab: tab !== "items" ? tab : undefined,
     };
     for (const [k, v] of Object.entries({ ...base, ...extra })) if (v !== undefined && v !== "") params.set(k, String(v));
     const s = params.toString();
     return s ? `/locations/racks?${s}` : "/locations/racks";
   };
-  const filterOnly = new URLSearchParams(Object.entries({ q, place, rack, status: status !== "all" ? status : "" }).filter(([, v]) => v) as [string, string][]).toString();
+  const filterOnly = new URLSearchParams(Object.entries({ q, place, floor, rack, status: status !== "all" ? status : "" }).filter(([, v]) => v) as [string, string][]).toString();
 
   const pages: (number | "gap")[] = [];
   const windowEnd = Math.min(lastPage, Math.max(5, page + 2));
@@ -84,7 +98,7 @@ export default async function RacksPage({ searchParams }: { searchParams: Promis
 
   const canManage = can(user, "locations.manage");
   const pct = (v: number) => (kpi.total > 0 ? `${((v / kpi.total) * 100).toFixed(1)}%` : "0.0%");
-  const filtersOn = !!(q || place || rack || status !== "all");
+  const filtersOn = !!(q || place || floor || rack || status !== "all");
   const showPanel = mode !== "view" || !!selId;
 
   return (
@@ -117,7 +131,7 @@ export default async function RacksPage({ searchParams }: { searchParams: Promis
 
       <div className={`grid gap-5 ${showPanel ? "xl:grid-cols-[minmax(0,1fr)_22rem]" : ""}`}>
         <section className={`${cardClass} min-w-0 !p-4`}>
-          <form method="get" className="mb-4 grid gap-3 md:grid-cols-[minmax(12rem,2.2fr)_repeat(3,minmax(0,1fr))_auto_auto] md:items-end">
+          <form method="get" className="mb-4 grid gap-3 md:grid-cols-[minmax(12rem,2.2fr)_repeat(4,minmax(0,1fr))_auto_auto] md:items-end">
             <label className="relative block">
               <span className="sr-only">Search</span>
               <Search size={18} aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
@@ -127,6 +141,11 @@ export default async function RacksPage({ searchParams }: { searchParams: Promis
             <FilterSelect label="Warehouse" name="place" value={place}>
               <option value="">All Warehouses</option>
               {result.places.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </FilterSelect>
+            <FilterSelect label="Floor" name="floor" value={floor}>
+              <option value="">All Floors</option>
+              {result.floors.map((f) => <option key={f} value={f}>{floorLabel(f)}</option>)}
+              <option value="-">No floor set</option>
             </FilterSelect>
             <FilterSelect label="Rack" name="rack" value={rack}>
               <option value="">All Racks</option>
@@ -147,7 +166,7 @@ export default async function RacksPage({ searchParams }: { searchParams: Promis
             <div className="overflow-x-auto">
               <table className="dash-table w-full text-left text-sm">
                 <thead>
-                  <tr><th>Location Code</th><th>Warehouse</th><th>Rack</th><th>Level</th><th>Bin</th><th>Type</th><th>Status</th><th className="text-right">Current Stock</th><th className="text-right">Capacity</th><th>Use</th><th>Actions</th></tr>
+                  <tr><th>Location Code</th><th>Warehouse</th><th>Floor</th><th>Rack</th><th>Level</th><th>Bin</th><th>Type</th><th>Status</th><th className="text-right">Current Stock</th><th className="text-right">Capacity</th><th>Use</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   {rows.map((r) => {
@@ -155,7 +174,8 @@ export default async function RacksPage({ searchParams }: { searchParams: Promis
                     return (
                       <tr key={r.id} aria-selected={selected} className={selected ? "!bg-brand-soft" : ""}>
                         <td className="whitespace-nowrap text-[13px] font-semibold"><Link href={keep({ sel: r.id, tab: undefined, new: undefined, edit: undefined })}>{r.code}</Link></td>
-                        <td>{r.city ?? r.place_name}</td>
+                        <td><span className="block">{r.place_name}</span>{r.city && <span className="block text-xs text-muted">{r.city}</span>}</td>
+                        <td>{r.floor ?? <span className="text-muted">-</span>}</td>
                         <td>{r.rack}</td><td>{r.level}</td><td>{r.bin_no}</td>
                         <td><span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${TYPE_STYLE[r.type]}`}>{TYPE_LABEL[r.type]}</span></td>
                         <td><Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge></td>
@@ -254,7 +274,7 @@ async function Panel({ mode, selId, tab, keep, places, canManage, defaultPlace }
 
   const supabase = await createClient();
   const [{ data: b }, { data: assigned }] = await Promise.all([
-    supabase.from("storage_bins").select("id, code, location_id, rack, level, bin_no, bin_type, capacity, notes, is_blocked, block_reason, locations(name, code, city)").eq("id", selId).maybeSingle(),
+    supabase.from("storage_bins").select("id, code, location_id, floor, rack, level, bin_no, bin_type, capacity, notes, is_blocked, block_reason, locations(name, code, city)").eq("id", selId).maybeSingle(),
     supabase.from("item_bins").select("id, item_id, items(internal_item_code, item_name, unit)").eq("bin_id", selId),
   ]);
   if (!b) return null;
@@ -267,7 +287,7 @@ async function Panel({ mode, selId, tab, keep, places, canManage, defaultPlace }
           <Link href={keep({ sel: b.id, edit: undefined })} aria-label="Close" className="inline-flex h-10 w-10 items-center justify-center rounded-lg hover:bg-surface-muted"><XIcon size={20} aria-hidden /></Link></div>
         <p className="mb-3 font-mono text-sm font-semibold">{b.code}</p>
         <BinForm
-          bin={{ id: b.id, locationId: b.location_id, rack: b.rack, level: b.level, binNo: b.bin_no, binType: b.bin_type, capacity: b.capacity === null ? null : Number(b.capacity), notes: b.notes, blocked: b.is_blocked, blockReason: b.block_reason }}
+          bin={{ id: b.id, locationId: b.location_id, floor: b.floor, rack: b.rack, level: b.level, binNo: b.bin_no, binType: b.bin_type, capacity: b.capacity === null ? null : Number(b.capacity), notes: b.notes, blocked: b.is_blocked, blockReason: b.block_reason }}
           places={places} defaultPlace={b.location_id} cancelHref={keep({ sel: b.id, edit: undefined })}
         />
       </aside>
@@ -304,6 +324,7 @@ async function Panel({ mode, selId, tab, keep, places, canManage, defaultPlace }
       </div>
       <dl>
         {field("Warehouse", place && `${place.name}${place.city ? ` (${place.city})` : ""}`)}
+        {field("Floor", b.floor ? floorLabel(b.floor) : "")}
         {field("Rack", b.rack)}
         {field("Level", b.level)}
         {field("Bin", b.bin_no)}

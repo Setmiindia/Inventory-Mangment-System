@@ -9,24 +9,28 @@ import { friendlyDbError } from "@/lib/db-errors";
 import { sanitizeSearch } from "@/lib/validation/item";
 import { binFromForm } from "@/lib/validation/bin";
 
-export type BinState = { ok: boolean; message: string } | null;
+// `values` hands the typed text back after an error, because React clears a form once its action finishes.
+export type BinState = { ok: boolean; message: string; values?: Record<string, string> } | null;
 const fail = (message: string): BinState => ({ ok: false, message });
 
 // Create (no id) or update (id) a rack / shelf / bin. Needs locations.manage; the database checks it again.
 // The code (for example WH01-A-01-01) is made by the database from the place code and the three parts.
 export async function saveBin(_prev: BinState, fd: FormData): Promise<BinState> {
   await requirePermission("locations.manage");
+  const typed: Record<string, string> = {};
+  for (const [k, v] of fd.entries()) if (typeof v === "string") typed[k] = v;
+  const fail = (message: string): BinState => ({ ok: false, message, values: typed });
   const parsed = binFromForm(fd);
   if (!parsed.success) return fail(parsed.error.issues[0].message);
   const v = parsed.data;
-  const row = { location_id: v.locationId, rack: v.rack, level: v.level, bin_no: v.binNo, bin_type: v.binType, capacity: v.capacity, notes: v.notes };
+  const row = { location_id: v.locationId, floor: v.floor, rack: v.rack, level: v.level, bin_no: v.binNo, bin_type: v.binType, capacity: v.capacity, notes: v.notes };
 
   const supabase = await createClient();
   const rawId = fd.get("id");
   let id: string;
   if (!rawId) {
     const { data, error } = await supabase.from("storage_bins").insert(row).select("id").single();
-    if (error) return fail(error.code === "23505" ? "This rack, level and bin already exist in that place." : friendlyDbError(error));
+    if (error) return fail(error.code === "23505" ? "This floor, rack, level and bin already exist in that place." : friendlyDbError(error));
     id = data.id;
   } else {
     const parsedId = z.uuid().safeParse(rawId);
@@ -36,7 +40,7 @@ export async function saveBin(_prev: BinState, fd: FormData): Promise<BinState> 
       .update({ ...row, is_blocked: v.blocked, block_reason: v.blocked ? v.blockReason : null })
       .eq("id", parsedId.data)
       .select("id");
-    if (error) return fail(error.code === "23505" ? "This rack, level and bin already exist in that place." : friendlyDbError(error));
+    if (error) return fail(error.code === "23505" ? "This floor, rack, level and bin already exist in that place." : friendlyDbError(error));
     if (!data || data.length === 0) return fail("Nothing was saved (you may not be allowed to edit it).");
     id = parsedId.data;
   }
