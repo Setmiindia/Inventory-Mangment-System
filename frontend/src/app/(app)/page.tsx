@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
-  ArrowLeftRight, ArrowUpDown, BarChart3, RefreshCw, Boxes, CheckCircle2, ChevronRight, CircleHelp, ClipboardList, MapPin, Package, PackageCheck,
+  ArrowLeftRight, ArrowUpDown, BarChart3, RefreshCw, Boxes, CircleHelp, ClipboardList, MapPin, Package, PackageCheck,
   LayoutDashboard, Receipt, ScanLine, ShieldCheck, ShoppingCart, Truck, type LucideIcon,
 } from "lucide-react";
 import { Reveal, RevealItem } from "@/components/motion";
+import { SetupChecklist } from "@/components/setup-checklist";
 import { can, requireUser, showDashboard } from "@/lib/auth";
 import { getLang, tr, type MessageKey } from "@/lib/i18n";
 import { isBillingEnabled } from "@/lib/settings";
-import { createClient } from "@/lib/supabase/server";
 import { cardClass } from "@/lib/ui";
 
 type Task = { href: string; label: MessageKey; hint: MessageKey; icon: LucideIcon; show: boolean };
@@ -41,29 +41,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     { href: "/locations", label: "task_places", hint: "task_places_hint", icon: MapPin, show: can(user, "locations.manage") },
   ].filter((x) => x.show) as Task[];
 
-  // First-time setup list for the administrator. It checks the real data, so ticks are not guesses.
-  type Step = { done: boolean; label: MessageKey; hint: MessageKey; href: string };
-  let steps: Step[] = [];
-  if (user.isAdmin && user.isActive) {
-    const supabase = await createClient();
-    const head = { count: "exact" as const, head: true };
-    const [placesQ, suppliersQ, itemsQ, peopleQ, stockQ] = await Promise.all([
-      supabase.from("locations").select("id", head).neq("type", "TRANSIT"),
-      supabase.from("suppliers").select("id", head),
-      supabase.from("items").select("id", head),
-      supabase.rpc("active_people_count"),
-      supabase.from("stock_balances").select("item_id", head),
-    ]);
-    steps = [
-      { done: (placesQ.count ?? 0) > 0, label: "step_places", hint: "step_places_hint", href: "/locations/new" },
-      { done: Number(peopleQ.data ?? 0) > 1, label: "step_staff", hint: "step_staff_hint", href: "/admin/users" },
-      { done: (itemsQ.count ?? 0) > 0, label: "step_items", hint: "step_items_hint", href: "/items/import" },
-      { done: (suppliersQ.count ?? 0) > 0, label: "step_suppliers", hint: "step_suppliers_hint", href: "/suppliers/new" },
-      { done: (stockQ.count ?? 0) > 0, label: "step_stock", hint: "step_stock_hint", href: "/stock/scan" },
-    ];
-  }
-  const doneCount = steps.filter((s) => s.done).length;
-
   return (
     <main className="space-y-6">
       <div>
@@ -77,28 +54,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </p>
       )}
 
-      {steps.length > 0 && doneCount < steps.length && (
-        <section className={`${cardClass} space-y-3 border-brand`}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg">{t("home_setup_title")} ({doneCount} / {steps.length} {t("home_setup_of")})</h2>
-            <Link href="/help#start" className="inline-flex items-center gap-1 text-sm"><CircleHelp size={16} aria-hidden /> {t("top_help")}</Link>
-          </div>
-          <ol className="space-y-2">
-            {steps.map((s) => (
-              <li key={s.label}>
-                <Link href={s.href} className="flex items-center gap-3 rounded-lg p-2 hover:bg-surface-muted">
-                  <CheckCircle2 size={22} className={s.done ? "text-green-600" : "text-muted"} aria-hidden />
-                  <span className="flex-1">
-                    <span className={`block font-medium ${s.done ? "text-muted line-through" : ""}`}>{t(s.label)}</span>
-                    <span className="block text-sm text-muted">{t(s.hint)}</span>
-                  </span>
-                  {!s.done && <ChevronRight size={18} className="text-muted" aria-hidden />}
-                </Link>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
+      <SetupChecklist user={user} lang={lang} />
 
       {tasks.length > 0 && (
         <Reveal className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

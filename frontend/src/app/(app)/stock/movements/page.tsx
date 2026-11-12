@@ -1,3 +1,4 @@
+import { streamed } from "@/components/streamed";
 import Link from "next/link";
 import {
   ArrowDownToLine, ArrowLeftRight, ChevronLeft, ChevronRight, Eye, FileBarChart, Layers, PackageMinus, PackagePlus, Package, Repeat, Search, Shuffle, Undo2, X, type LucideIcon,
@@ -51,7 +52,7 @@ const TypePill = ({ type }: { type: string }) => <span className={`inline-flex w
 
 // The stock ledger: every movement of every product in the places the person works in, newest first.
 // The ledger is append-only: nothing on this page can be changed. The balance is the quantity in that place right after the line.
-export default async function StockLedgerPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+export default streamed(async function StockLedgerPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   await requirePermission("stock.view");
   const sp = await searchParams;
 
@@ -172,7 +173,7 @@ export default async function StockLedgerPage({ searchParams }: { searchParams: 
             <div className="overflow-x-auto">
               <table className="dash-table w-full text-left text-sm">
                 <thead>
-                  <tr><th>#</th><th>Date &amp; Time</th><th>Type</th><th>Reference No.</th><th>Item (SKU)</th><th>Item Name</th><th>Warehouse</th><th className="text-right">In Qty</th><th className="text-right">Out Qty</th><th className="text-right">Balance</th><th>User</th><th>Remarks</th><th className="print:hidden">Actions</th></tr>
+                  <tr><th>#</th><th>Date &amp; Time</th><th>Type</th><th>Item</th><th>Warehouse</th><th className="text-right">In Qty</th><th className="text-right">Out Qty</th><th className="text-right">Balance</th><th>Reason</th><th className="print:hidden">Actions</th></tr>
                 </thead>
                 <tbody>
                   {rows.map((r, i) => {
@@ -181,16 +182,13 @@ export default async function StockLedgerPage({ searchParams }: { searchParams: 
                     return (
                       <tr key={`${r.id}-${r.location_id}`} aria-selected={selected} className={selected ? "!bg-brand-soft" : ""}>
                         <td className="text-muted">{(page - 1) * size + i + 1}</td>
-                        <td className="whitespace-nowrap">{day(r.created_at)}<span className="block text-xs text-muted">{time(r.created_at)}</span></td>
-                        <td><TypePill type={r.typ} /></td>
-                        <td className="whitespace-nowrap text-[13px]">{r.reference ?? ""}</td>
-                        <td className="whitespace-nowrap text-[13px] font-semibold"><Link href={viewHref}>{r.code}</Link></td>
-                        <td className="min-w-32">{r.item_name}</td>
+                        <td className="whitespace-nowrap">{day(r.created_at)}<span className="block text-xs text-muted">{time(r.created_at)}{r.user_name ? ` · ${r.user_name}` : ""}</span></td>
+                        <td><TypePill type={r.typ} />{r.reference && <span className="mt-0.5 block whitespace-nowrap text-xs text-muted">{r.reference}</span>}</td>
+                        <td className="min-w-40"><Link href={viewHref} className="block text-[13px] font-semibold">{r.code}</Link><span className="block text-xs text-muted">{r.item_name}</span></td>
                         <td className="min-w-24">{r.place_name}</td>
                         <td className="text-right font-mono">{r.in_qty === null ? "-" : n(r.in_qty)}</td>
                         <td className={`text-right font-mono ${r.out_qty !== null && r.typ === "ADJUSTMENT" ? "text-[var(--danger)]" : ""}`}>{r.out_qty === null ? "-" : n(r.out_qty)}</td>
                         <td className="text-right font-mono">{n(r.balance)}</td>
-                        <td className="whitespace-nowrap">{r.user_name ?? ""}</td>
                         <td className="min-w-28 text-[13px]">{r.reason ?? ""}</td>
                         <td className="print:hidden">
                           <span className="flex items-center gap-1">
@@ -223,7 +221,7 @@ export default async function StockLedgerPage({ searchParams }: { searchParams: 
       </div>
     </main>
   );
-}
+})
 
 function FilterSelect({ label, name, value, children }: { label: string; name: string; value: string; children: React.ReactNode }) {
   return (

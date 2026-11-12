@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { streamed } from "@/components/streamed";
 import {
   ArrowDownToLine, Check, CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, FileText, Layers, PackageMinus, PackagePlus, Plus, Search, Settings2, X as XIcon, XCircle, type LucideIcon,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import { AdjRowMenu } from "./adj-menu";
 import { DecisionForm } from "./decision-form";
 import { EntryForm } from "./entry-form";
 import { ENTRY_LABELS } from "./labels";
+import { EntryTabs, NewEntryView } from "./new-entry-view";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -53,7 +55,7 @@ const TypePill = ({ dir }: { dir: string }) => (
   <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${dir === "IN" ? "bg-[#e3f6ec] text-[#16824f] dark:bg-[#123a2a] dark:text-[#6fe0a8]" : "bg-[#fde8e8] text-[#c8302f] dark:bg-[#4a1c1c] dark:text-[#f5a0a0]"}`}>{dir === "IN" ? "Increase" : "Decrease"}</span>
 );
 
-export default async function StockAdjustmentPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+export default streamed(async function StockAdjustmentPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const user = await requireAnyPermission("stock.entry", "stock.view", "stock.approve");
   const lang = await getLang();
   const sp = await searchParams;
@@ -68,6 +70,9 @@ export default async function StockAdjustmentPage({ searchParams }: { searchPara
   const page = Math.min(Math.max(parseInt(first(sp.page) ?? "1", 10) || 1, 1), 100000);
   const canEntry = can(user, "stock.entry");
   const canApprove = can(user, "stock.approve");
+  // The daily screen is the quick form. A plain visit (no filters, no chosen entry) and ?view=new open it for people who may make entries;
+  // every history link carries filters or ?view=history, so the table keeps working.
+  if (canEntry && (first(sp.view) === "new" || Object.keys(sp).length === 0)) return <NewEntryView user={user} lang={lang} canApprove={canApprove} />;
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("stock_adjustments_page", {
@@ -93,7 +98,7 @@ export default async function StockAdjustmentPage({ searchParams }: { searchPara
     };
     for (const [k, v] of Object.entries({ ...base, ...extra })) if (v !== undefined && v !== "") params.set(k, String(v));
     const s = params.toString();
-    return s ? `/stock/entry?${s}` : "/stock/entry";
+    return s ? `/stock/entry?${s}` : "/stock/entry?view=history";
   };
   const filterOnly = new URLSearchParams(Object.entries({ q, place, type: type !== "all" ? type : "", status: status !== "all" ? status : "", from, to }).filter(([, v]) => v) as [string, string][]).toString();
 
@@ -111,6 +116,7 @@ export default async function StockAdjustmentPage({ searchParams }: { searchPara
 
   return (
     <main className="space-y-5">
+      {canEntry && <EntryTabs active="history" />}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <nav aria-label="Breadcrumb" className="mb-1 flex items-center gap-2 text-sm text-muted">
@@ -169,7 +175,7 @@ export default async function StockAdjustmentPage({ searchParams }: { searchPara
                 <input type="date" name="from" defaultValue={from} className="min-h-12 w-full rounded-xl border border-[var(--line-strong)] bg-surface px-3 text-base md:text-sm" /></label>
               <label className="block"><span className="mb-1 block text-xs text-muted">Date To</span>
                 <input type="date" name="to" defaultValue={to} className="min-h-12 w-full rounded-xl border border-[var(--line-strong)] bg-surface px-3 text-base md:text-sm" /></label>
-              <Link href="/stock/entry" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line bg-surface px-5 text-sm font-semibold hover:bg-surface-muted">Clear</Link>
+              <Link href="/stock/entry?view=history" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line bg-surface px-5 text-sm font-semibold hover:bg-surface-muted">Clear</Link>
               <button type="submit" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-5 text-sm font-semibold text-white hover:bg-brand-strong">
                 <Search size={16} aria-hidden /> Filter
               </button>
@@ -256,7 +262,7 @@ export default async function StockAdjustmentPage({ searchParams }: { searchPara
       </div>
     </main>
   );
-}
+})
 
 function FilterSelect({ label, name, value, children }: { label: string; name: string; value: string; children: React.ReactNode }) {
   return (
@@ -303,7 +309,7 @@ async function CreatePanel({ lang, user, canApprove }: { lang: "en" | "hi"; user
           : "Your adjustment waits for a manager. The stock changes only after it is approved."}
         {" "}It is for {loc.name}; to adjust another place, switch your working place at the top.
       </p>
-      <EntryForm placeName={`${loc.name} (${loc.code})`} reasonLabels={REASON_LABELS[lang]} t={t} />
+      <EntryForm placeName={`${loc.name} (${loc.code})`} reasonLabels={REASON_LABELS[lang]} t={t} needsApproval={!canApprove} />
     </div>
   );
 }
@@ -390,4 +396,4 @@ async function DetailsPanel({ selId, keep, canApprove, lang }: { selId: string |
   );
 }
 
-export const metadata = { title: "Stock Adjustment" };
+export const metadata = { title: "Stock In / Out" };

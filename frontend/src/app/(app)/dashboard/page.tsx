@@ -15,6 +15,7 @@ import { cardClass } from "@/lib/ui";
 import { friendlyDbError } from "@/lib/db-errors";
 import { PO_STATUS_LABEL, PO_STATUS_TONE } from "../purchase-orders/status";
 import { DashboardFilters, QuickAction } from "../top-bar-parts";
+import { SetupChecklist } from "@/components/setup-checklist";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -136,6 +137,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <QuickAction label={t("dash_quick")} actions={quick} />
         </div>
       </div>
+
+      <SetupChecklist user={user} lang={lang} />
 
       {error && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700">{friendlyDbError(error)}</p>}
       {!error && !hasAny && <p role="status" className="rounded-xl border border-amber-400 bg-amber-50 p-4 text-sm text-amber-900">{t("dash_no_sections")}</p>}

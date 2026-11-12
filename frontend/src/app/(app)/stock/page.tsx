@@ -1,3 +1,4 @@
+import { streamed } from "@/components/streamed";
 import Link from "next/link";
 import {
   AlertTriangle, ArrowDownToLine, ChevronLeft, ChevronRight, IndianRupee, Layers, Package, PackageX, Search, SquarePen, X, Boxes, ClipboardList, type LucideIcon,
@@ -45,7 +46,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 const StatusPill = ({ status }: { status: string }) => <span className={`inline-flex whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[status]}`}>{STATUS_LABEL[status]}</span>;
 
-export default async function CurrentStockPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+export default streamed(async function CurrentStockPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const user = await requirePermission("stock.view");
   const sp = await searchParams;
 
@@ -165,7 +166,7 @@ export default async function CurrentStockPage({ searchParams }: { searchParams:
             <div className="overflow-x-auto">
               <table className="dash-table w-full text-left text-sm">
                 <thead>
-                  <tr><th>#</th><th>Image</th><th>SKU Code</th><th>Item Name</th><th>Category</th><th>Warehouse</th><th>Rack</th><th className="text-right">Current Stock</th><th className="text-right">Min Stock</th><th className="text-right">Max Stock</th><th>Status</th><th>Actions</th></tr>
+                  <tr><th>#</th><th>Item</th><th>Category</th><th>Warehouse</th><th className="text-right">Current Stock</th><th className="text-right">Min Stock</th><th className="text-right">Max Stock</th><th>Status</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   {rows.map((r, i) => {
@@ -175,17 +176,20 @@ export default async function CurrentStockPage({ searchParams }: { searchParams:
                     return (
                       <tr key={`${r.item_id}-${r.location_id}`} aria-selected={selected} className={selected ? "!bg-brand-soft" : ""}>
                         <td className="text-muted">{(page - 1) * size + i + 1}</td>
-                        <td>
-                          {thumb ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={thumb} alt="" className="h-10 w-10 rounded-lg border border-line object-cover" />
-                          ) : <span aria-hidden className="flex h-10 w-10 items-center justify-center rounded-lg border border-line bg-surface-muted text-muted"><Package size={18} /></span>}
+                        <td className="min-w-48">
+                          <span className="flex items-center gap-3">
+                            {thumb ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={thumb} alt="" className="h-10 w-10 shrink-0 rounded-lg border border-line object-cover" />
+                            ) : <span aria-hidden className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-muted text-muted"><Package size={18} /></span>}
+                            <span className="min-w-0">
+                              <Link href={viewHref} className="block text-[13px] font-semibold">{r.code}</Link>
+                              <span className="block font-medium">{r.item_name}</span>
+                            </span>
+                          </span>
                         </td>
-                        <td className="whitespace-nowrap text-[13px] font-semibold"><Link href={viewHref}>{r.code}</Link></td>
-                        <td className="min-w-32 font-medium">{r.item_name}</td>
                         <td className="min-w-24">{r.category_name ?? ""}</td>
-                        <td className="min-w-24">{r.place_name}</td>
-                        <td className="whitespace-nowrap font-mono text-xs">{r.rack ?? ""}</td>
+                        <td className="min-w-28">{r.place_name}{r.rack && <span className="block whitespace-nowrap font-mono text-xs text-muted">{r.rack}</span>}</td>
                         <td className={`text-right font-mono ${r.status === "OUT" ? "font-bold text-[var(--danger)]" : ""}`}>{n(r.qty)}</td>
                         <td className="text-right font-mono">{r.min_qty === null ? "" : n(r.min_qty)}</td>
                         <td className="text-right font-mono">{r.max_qty === null ? "" : n(r.max_qty)}</td>
@@ -222,7 +226,7 @@ export default async function CurrentStockPage({ searchParams }: { searchParams:
       </div>
     </main>
   );
-}
+})
 
 function FilterSelect({ label, name, value, children }: { label: string; name: string; value: string; children: React.ReactNode }) {
   return (

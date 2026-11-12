@@ -274,34 +274,20 @@ export function AddProductForm({ categories, brands, canEditPrice, canUploadImag
               <label className="block"><span className={lab}>Purchase Source</span>
                 <select name="purchaseSource" defaultValue="LOCAL" className={field}><option value="LOCAL">LOCAL (Indian supplier)</option><option value="IMPORT">IMPORT (foreign supplier)</option></select></label>
               <label className="block"><span className={lab}>Import Item Code</span><input name="importItemCode" maxLength={64} className={field} /></label>
-              <label className="block"><span className={lab}>Minimum Purchase Qty (MOQ)</span><input name="moq" inputMode="decimal" maxLength={12} className={field} /></label>
               <label className="block"><span className={lab}>Purchase Lead Time (days)</span><input name="leadTimeDays" inputMode="numeric" maxLength={4} className={field} /></label>
               <label className="block"><span className={lab}>Reorder safety factor (empty = 1.5)</span><input name="safetyFactor" inputMode="decimal" maxLength={5} className={field} /></label>
             </div>
             <p className="mt-3 text-xs text-muted">Minimum and maximum stock per warehouse is set on the Stock screen after saving. Opening stock: use Stock In after saving.</p>
           </More>
 
-          <More title="Specifications (optional)" hint="Type, material, colour, weight and size.">
+          <More title="Specifications (optional)" hint="Colour and weight.">
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block"><span className={lab}>Product Type</span><input name="productType" maxLength={100} list="type-list" className={field} />
-                <datalist id="type-list"><option value="Finished Goods" /><option value="Raw Material" /><option value="Component" /><option value="Accessory" /><option value="Consumable" /></datalist></label>
-              <label className="block"><span className={lab}>Material</span><input name="material" maxLength={100} className={field} /></label>
               <label className="block"><span className={lab}>Color</span><input name="color" maxLength={100} className={field} /></label>
-              <label className="block"><span className={lab}>Model / Part No.</span><input name="modelNo" maxLength={100} className={field} /></label>
               <div><span className={lab}>Net Weight</span>
                 <div className="flex gap-2">
                   <input name="netWeight" inputMode="decimal" maxLength={12} aria-label="Net weight" className={field} />
                   <select name="weightUnit" defaultValue="kg" aria-label="Weight unit" className={`${field} !w-20 shrink-0`}><option value="g">g</option><option value="kg">kg</option></select>
                 </div></div>
-              <label className="block"><span className={lab}>Country of Origin</span><input name="countryOfOrigin" maxLength={100} className={field} /></label>
-              <div className="sm:col-span-2"><span className={lab}>Size (L × W × H)</span>
-                <div className="flex gap-2">
-                  <input name="dimL" inputMode="decimal" maxLength={12} placeholder="L" aria-label="Length" className={field} />
-                  <input name="dimW" inputMode="decimal" maxLength={12} placeholder="W" aria-label="Width" className={field} />
-                  <input name="dimH" inputMode="decimal" maxLength={12} placeholder="H" aria-label="Height" className={field} />
-                  <select name="dimUnit" defaultValue="cm" aria-label="Size unit" className={`${field} !w-20 shrink-0`}><option value="mm">mm</option><option value="cm">cm</option><option value="m">m</option><option value="in">in</option></select>
-                </div></div>
-              <label className="block sm:col-span-2"><span className={lab}>Shelf Life / Warranty</span><input name="shelfLife" maxLength={100} className={field} /></label>
             </div>
           </More>
 
