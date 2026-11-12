@@ -1,4 +1,3 @@
-import type { NextConfig } from "next";
 
 // Content-Security-Policy. Not the nonce version: nonces need every page to be rendered on each request, which
 // does not work with Cache Components / partial prerendering (see the Next.js CSP guide). So scripts and styles
@@ -20,7 +19,9 @@ const contentSecurityPolicy = [
   "frame-ancestors 'none'",
 ].join("; ");
 
-const nextConfig: NextConfig = {
+// Plain JavaScript on purpose: the Hostinger build server cannot load the fast native compiler, so a TypeScript config could not be read.
+/** @type {import("next").NextConfig} */
+const nextConfig = {
   /* config options here */
   poweredByHeader: false, // do not tell strangers which framework runs the site
   cacheComponents: true,
