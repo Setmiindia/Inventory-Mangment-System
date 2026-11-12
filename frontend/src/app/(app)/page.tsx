@@ -51,12 +51,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       supabase.from("locations").select("id", head).neq("type", "TRANSIT"),
       supabase.from("suppliers").select("id", head),
       supabase.from("items").select("id", head),
-      supabase.from("profiles").select("id", head).eq("is_active", true),
+      supabase.rpc("active_people_count"),
       supabase.from("stock_balances").select("item_id", head),
     ]);
     steps = [
       { done: (placesQ.count ?? 0) > 0, label: "step_places", hint: "step_places_hint", href: "/locations/new" },
-      { done: (peopleQ.count ?? 0) > 1, label: "step_staff", hint: "step_staff_hint", href: "/admin/users" },
+      { done: Number(peopleQ.data ?? 0) > 1, label: "step_staff", hint: "step_staff_hint", href: "/admin/users" },
       { done: (itemsQ.count ?? 0) > 0, label: "step_items", hint: "step_items_hint", href: "/items/import" },
       { done: (suppliersQ.count ?? 0) > 0, label: "step_suppliers", hint: "step_suppliers_hint", href: "/suppliers/new" },
       { done: (stockQ.count ?? 0) > 0, label: "step_stock", hint: "step_stock_hint", href: "/stock/scan" },

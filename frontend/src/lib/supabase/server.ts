@@ -11,7 +11,9 @@ export async function createClient(options?: { sessionOnly?: boolean }) {
   const cookieStore = await cookies();
   const { url, key } = supabaseEnv();
 
+  // All inventory tables and functions live in the `inventory` schema of the central database.
   return createServerClient(url, key, {
+    db: { schema: "inventory" },
     cookies: {
       getAll() {
         return cookieStore.getAll();

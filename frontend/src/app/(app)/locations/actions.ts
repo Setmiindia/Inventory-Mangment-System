@@ -8,13 +8,17 @@ import { createClient } from "@/lib/supabase/server";
 import { friendlyDbError } from "@/lib/db-errors";
 import { locationFromForm } from "@/lib/validation/location";
 
-export type LocationState = { ok: boolean; message: string } | null;
+// `values` hands the typed text back after an error, because React clears a form once its action finishes.
+export type LocationState = { ok: boolean; message: string; values?: Record<string, string> } | null;
 const fail = (message: string): LocationState => ({ ok: false, message });
 
 // Create (no id) or update (id). Needs locations.manage; the database checks it again.
 // On update, expectedUpdatedAt stops two people overwriting each other's change.
 export async function saveLocation(_prev: LocationState, fd: FormData): Promise<LocationState> {
   await requirePermission("locations.manage");
+  const typed: Record<string, string> = {};
+  for (const [k, v] of fd.entries()) if (typeof v === "string") typed[k] = v;
+  const fail = (message: string): LocationState => ({ ok: false, message, values: typed });
 
   const parsed = locationFromForm(fd);
   if (!parsed.success) return fail(parsed.error.issues[0].message);

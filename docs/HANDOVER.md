@@ -11,8 +11,12 @@ Newest entry on top. Read this first, update it last.
 - `backend/` (Express) was deleted: nothing called it. `backend/supabase/` moved to `supabase/`. CI now has only the frontend job.
 - Code pushed to https://github.com/Setmiindia/Inventory-Mangment-System (branch `main`).
 
+- **Frontend moved to the central database (done later the same day, NOT committed):** `lib/supabase/server.ts` uses `db: { schema: "inventory" }`; `lib/auth.ts`, the dashboard and the two locations pages use the new functions `my_profile`, `active_people_count`, `location_team` (migration `20261112000062_staff_identity_helpers.sql`, applied). `lib/reports.ts` client type set to the `inventory` schema. `typecheck`, `lint`, `npm test` (60/60) pass. In Chrome on localhost:3000, signed in as the owner (who was given a `staff_profiles` row with role `admin` and inventory admin access): the dashboard, Users & Roles, Products and Warehouses show their data, and 33 routes answered 200 with no error text. The database is empty, so only empty states were seen: NO real save/edit/stock flow was tested yet.
+
+- **Warehouses module polished (2026-11-12):** list/new/[id] pages read their data inside `<Suspense>` (removes the "uncached data" dev warning for them; the other ~30 routes still show it, to be done module by module). Add/Edit form regrouped into 3 sections with hints, type cards, Cancel, and the typed text is kept after a failed save (`values` in `LocationState`). Tested on localhost with real data (duplicate code error, create, edit, archive, restore); the test row was deleted. Phone width not checked.
+
 ### Not done / next
-- **The frontend still talks to schema `public` and the old `profiles` table.** It will not work against the central database until that is changed (Step 3): set the Supabase clients' default schema to `inventory`, replace `profiles` reads (name, email, active, admin, role, department) with `staff_profiles` / `user_access`, and remove the user "name" edit (the name is central now).
+- Test real flows on localhost with data (add a warehouse, product, stock in, a transfer, a bill). The user "name" edit in Users & Roles no longer changes the name (central now); the old screen box still exists.
 - Storage policies for the `item-files` bucket do not exist (`storage.objects` is owned by Supabase, SQL from migrations 002/028 had no effect): uploads fail until they are created in the Dashboard. Test 003 fails for this reason.
 - Hostinger deploy not started (needs Node.js hosting for Next.js).
 - `docs/` still describe `profiles` in older entries (history); `docs/DEPENDENCIES.md` still lists the removed Express packages (history); other docs were only path-fixed.

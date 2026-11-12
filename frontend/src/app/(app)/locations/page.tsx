@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   Building2, CheckCircle2, ChevronLeft, ChevronRight, Eye, Mail, MapPin, PackageCheck, Phone, PieChart, Power, Search, SquarePen, Store, User, Warehouse, X,
   Package, type LucideIcon,
@@ -14,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { cardClass } from "@/lib/ui";
 import { sanitizeSearch } from "@/lib/validation/item";
 import { RowsPerPage } from "../items/item-controls";
+import { KpiSkeleton, TableSkeleton } from "../items/items-table";
 import { toggleLocationActive } from "./actions";
 import { AddPlaceMenu, PlaceRowMenu } from "./location-controls";
 
@@ -40,7 +42,17 @@ const barTone = (u: number) => (u >= 90 ? "bg-red-500" : u >= 70 ? "bg-amber-400
 
 // Everyone signed in may open this page; the database returns only the places the person may see
 // (their own, or all for admins and location managers).
-export default async function LocationsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+// The page itself reads nothing at request time; the session and the database are read inside <Suspense>,
+// so the screen can show its frame at once (and Next.js can check navigations are instant).
+export default function LocationsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  return (
+    <Suspense fallback={<main className="space-y-4"><KpiSkeleton /><TableSkeleton /></main>}>
+      <LocationsContent searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function LocationsContent({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const user = await requireUser();
   const sp = await searchParams;
 
@@ -282,8 +294,8 @@ async function Panel({ id, tab, keep, canManage, isAdmin }: { id: string; tab: s
 
   let team: { id: string; email: string; full_name: string | null }[] = [];
   if (isAdmin && tab === "team") {
-    const { data } = await supabase.from("user_locations").select("profiles(id, email, full_name)").eq("location_id", l.id);
-    team = (data ?? []).map((r) => r.profiles as unknown as { id: string; email: string; full_name: string | null } | null).filter((p): p is { id: string; email: string; full_name: string | null } => !!p);
+    const { data } = await supabase.rpc("location_team", { p_location: l.id });
+    team = (data ?? []) as { id: string; email: string; full_name: string | null }[];
   }
   const inStock = (stock ?? []).filter((s) => Number(s.quantity) > 0);
   const slots = l.capacity as number | null;

@@ -21,11 +21,8 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   // The two reads do not depend on each other: ask together (one network wait instead of two).
   const [{ data: profile, error: profileError }, { data: perms }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("email, full_name, is_active, is_admin")
-      .eq("id", auth.user.id)
-      .maybeSingle(),
+    // Name/active come from the central staff table, rights from inventory.user_access (one database function).
+    supabase.rpc("my_profile").maybeSingle<{ email: string | null; full_name: string | null; is_active: boolean; is_admin: boolean }>(),
     supabase
       .from("user_permissions")
       .select("permission_key")

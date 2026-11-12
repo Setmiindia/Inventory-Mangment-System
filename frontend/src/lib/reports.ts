@@ -1,6 +1,8 @@
 import "server-only";
 import { z } from "zod";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient as BaseClient } from "@supabase/supabase-js";
+// The app talks to the `inventory` schema of the central database.
+type SupabaseClient = BaseClient<any, "inventory", "inventory">; // eslint-disable-line @typescript-eslint/no-explicit-any
 import type { CsvColumn } from "@/lib/csv";
 
 // One place that says which reports exist, what they are called, their columns, and how to
