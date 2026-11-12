@@ -5,7 +5,7 @@
 -- Draft (not posted), Posted (stock added) and Cancelled. "Partly received" = a posted receipt whose purchase order
 -- is still waiting for more goods.
 -- Runs as the caller (SECURITY INVOKER): row-level security decides which receipts (and which orders) are visible.
-create or replace function public.receipts_page(
+create or replace function inventory.receipts_page(
   p_q text default null,
   p_location uuid default null,
   p_supplier uuid default null,
@@ -29,7 +29,7 @@ declare
   v_today date := (now() at time zone 'Asia/Kolkata')::date;
   v_result jsonb;
 begin
-  if not (public.has_permission('receipts.view') or public.has_permission('receipts.create') or public.has_permission('receipts.post')) then
+  if not (inventory.has_permission('receipts.view') or inventory.has_permission('receipts.create') or inventory.has_permission('receipts.post')) then
     raise exception 'You do not have permission to see goods receipts' using errcode = '42501';
   end if;
   if p_status is not null and p_status not in ('', 'all', 'DRAFT', 'POSTED', 'CANCELLED', 'PARTIAL') then
@@ -47,11 +47,11 @@ begin
            o.id as po_id, o.po_no,
            (r.status = 'POSTED' and o.status = 'PARTIAL') as partial,
            coalesce(t.items, 0) as items, coalesce(t.qty, 0) as qty
-      from public.goods_receipts r
-      join public.suppliers s on s.id = r.supplier_id
-      join public.locations l on l.id = r.location_id
-      left join public.purchase_orders o on o.id = r.purchase_order_id
-      left join (select gl.receipt_id, count(*) as items, sum(gl.quantity) as qty from public.goods_receipt_lines gl group by gl.receipt_id) t on t.receipt_id = r.id
+      from inventory.goods_receipts r
+      join inventory.suppliers s on s.id = r.supplier_id
+      join inventory.locations l on l.id = r.location_id
+      left join inventory.purchase_orders o on o.id = r.purchase_order_id
+      left join (select gl.receipt_id, count(*) as items, sum(gl.quantity) as qty from inventory.goods_receipt_lines gl group by gl.receipt_id) t on t.receipt_id = r.id
   ),
   filtered as (
     select b.* from base b
@@ -62,15 +62,15 @@ begin
        and (p_from is null or b.receipt_date >= p_from)
        and (p_to is null or b.receipt_date <= p_to)
        and (coalesce(p_q, '') = '' or b.receipt_no ilike v_like or b.po_no ilike v_like or b.supplier_name ilike v_like or b.supplier_invoice_no ilike v_like
-            or exists (select 1 from public.goods_receipt_lines gl join public.items i on i.id = gl.item_id
+            or exists (select 1 from inventory.goods_receipt_lines gl join inventory.items i on i.id = gl.item_id
                         where gl.receipt_id = b.id and (i.internal_item_code ilike v_like or i.item_name ilike v_like)))
   )
   select jsonb_build_object(
     'total', (select count(*) from filtered),
     'rows', (select coalesce(jsonb_agg(to_jsonb(t) order by t.created_at desc), '[]'::jsonb)
                from (select * from filtered order by created_at desc, receipt_no desc limit v_limit offset v_offset) t),
-    'suppliers', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.suppliers where is_active),
-    'places', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.locations where is_active and type <> 'TRANSIT'),
+    'suppliers', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.suppliers where is_active),
+    'places', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.locations where is_active and type <> 'TRANSIT'),
     'kpi', jsonb_build_object(
       'total', (select count(*) from base),
       'today', (select count(*) from base where status = 'POSTED' and (posted_at at time zone 'Asia/Kolkata')::date = v_today),
@@ -83,5 +83,5 @@ begin
   return v_result;
 end $$;
 
-revoke execute on function public.receipts_page(text, uuid, uuid, text, text, date, date, int, int) from public, anon;
-grant execute on function public.receipts_page(text, uuid, uuid, text, text, date, date, int, int) to authenticated;
+revoke execute on function inventory.receipts_page(text, uuid, uuid, text, text, date, date, int, int) from public, anon;
+grant execute on function inventory.receipts_page(text, uuid, uuid, text, text, date, date, int, int) to authenticated;

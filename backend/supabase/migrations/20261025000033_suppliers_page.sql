@@ -1,30 +1,30 @@
 -- Suppliers screen (owner's mock): an automatic supplier code (SUP-001...), city, website, payment terms and currency,
 -- and one call that returns a page of suppliers plus the five top numbers and the list of countries.
 -- All new columns are optional or have a default, so existing suppliers stay valid.
-create sequence if not exists public.supplier_code_seq;
+create sequence if not exists inventory.supplier_code_seq;
 -- The code is filled in by the column default when a supplier is added, so the adding person needs the right to use the sequence.
-grant usage on sequence public.supplier_code_seq to authenticated;
+grant usage on sequence inventory.supplier_code_seq to authenticated;
 
-alter table public.suppliers
-  add column if not exists code text not null default ('SUP-' || lpad(nextval('public.supplier_code_seq')::text, 3, '0')),
+alter table inventory.suppliers
+  add column if not exists code text not null default ('SUP-' || lpad(nextval('inventory.supplier_code_seq')::text, 3, '0')),
   add column if not exists city text,
   add column if not exists website text,
   add column if not exists payment_terms text,
   add column if not exists currency text not null default 'INR';
 
-alter table public.suppliers
+alter table inventory.suppliers
   drop constraint if exists suppliers_city_len,
   drop constraint if exists suppliers_website_len,
   drop constraint if exists suppliers_terms_len,
   drop constraint if exists suppliers_currency_fmt;
-alter table public.suppliers
+alter table inventory.suppliers
   add constraint suppliers_city_len check (city is null or char_length(city) <= 60),
   add constraint suppliers_website_len check (website is null or char_length(website) <= 200),
   add constraint suppliers_terms_len check (payment_terms is null or char_length(payment_terms) <= 60),
   add constraint suppliers_currency_fmt check (currency ~ '^[A-Z]{3}$');
-create unique index if not exists suppliers_code_uq on public.suppliers (code);
+create unique index if not exists suppliers_code_uq on inventory.suppliers (code);
 
-create or replace function public.suppliers_page(
+create or replace function inventory.suppliers_page(
   p_q text default null,
   p_type text default null,      -- LOCAL | IMPORT
   p_status text default null,    -- all | active | inactive
@@ -45,7 +45,7 @@ declare
   v_today date := (now() at time zone 'Asia/Kolkata')::date;
   v_result jsonb;
 begin
-  if not (public.has_permission('suppliers.view') or public.has_permission('suppliers.manage')) then
+  if not (inventory.has_permission('suppliers.view') or inventory.has_permission('suppliers.manage')) then
     raise exception 'You do not have permission to see suppliers' using errcode = '42501';
   end if;
   if p_status is not null and p_status not in ('', 'all', 'active', 'inactive') then
@@ -59,7 +59,7 @@ begin
   with base as (
     select s.id, s.code, s.name, s.supplier_type::text as type, s.country, s.city, s.contact_person, s.phone, s.email,
            s.is_active as active, s.created_at
-      from public.suppliers s
+      from inventory.suppliers s
   ),
   filtered as (
     select b.* from base b
@@ -79,12 +79,12 @@ begin
       'total', (select count(*) from base),
       'active', (select count(*) from base where active),
       'inactive', (select count(*) from base where not active),
-      'with_orders', (select count(distinct o.supplier_id) from public.purchase_orders o),
+      'with_orders', (select count(distinct o.supplier_id) from inventory.purchase_orders o),
       'import', (select count(*) from base where type = 'IMPORT'),
       'new_month', (select count(*) from base where (created_at at time zone 'Asia/Kolkata')::date >= date_trunc('month', v_today)::date)))
   into v_result;
   return v_result;
 end $$;
 
-revoke execute on function public.suppliers_page(text, text, text, text, int, int) from public, anon;
-grant execute on function public.suppliers_page(text, text, text, text, int, int) to authenticated;
+revoke execute on function inventory.suppliers_page(text, text, text, text, int, int) from public, anon;
+grant execute on function inventory.suppliers_page(text, text, text, text, int, int) to authenticated;

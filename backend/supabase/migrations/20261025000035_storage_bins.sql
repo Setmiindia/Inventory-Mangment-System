@@ -3,9 +3,9 @@
 -- warehouse or shop. A bin's "current stock" is the warehouse stock of the products assigned to that bin
 -- (a product sits in at most one bin per place). Depends on 20261024000001_foundation.sql.
 
-create table public.storage_bins (
+create table inventory.storage_bins (
   id           uuid primary key default gen_random_uuid(),
-  location_id  uuid not null references public.locations (id) on delete restrict,
+  location_id  uuid not null references inventory.locations (id) on delete restrict,
   rack         text not null check (rack ~ '^[A-Z0-9]{1,6}$'),
   level        text not null check (level ~ '^[A-Z0-9]{1,6}$'),
   bin_no       text not null check (bin_no ~ '^[A-Z0-9]{1,6}$'),
@@ -18,33 +18,33 @@ create table public.storage_bins (
   block_reason text check (block_reason is null or char_length(block_reason) <= 200),
   notes        text check (notes is null or char_length(notes) <= 500),
   created_at   timestamptz not null default now(),
-  created_by   uuid references public.profiles (id),
+  created_by   uuid references public.staff_profiles (id),
   updated_at   timestamptz not null default now(),
-  updated_by   uuid references public.profiles (id),
+  updated_by   uuid references public.staff_profiles (id),
   constraint storage_bins_code_uq unique (code),
   constraint storage_bins_id_location_uq unique (id, location_id)
 );
-create index storage_bins_location_idx on public.storage_bins (location_id);
+create index storage_bins_location_idx on inventory.storage_bins (location_id);
 
-create table public.item_bins (
+create table inventory.item_bins (
   id          uuid primary key default gen_random_uuid(),
   bin_id      uuid not null,
   location_id uuid not null,
-  item_id     uuid not null references public.items (id) on delete restrict,
+  item_id     uuid not null references inventory.items (id) on delete restrict,
   created_at  timestamptz not null default now(),
-  created_by  uuid references public.profiles (id),
-  foreign key (bin_id, location_id) references public.storage_bins (id, location_id) on delete restrict,
+  created_by  uuid references public.staff_profiles (id),
+  foreign key (bin_id, location_id) references inventory.storage_bins (id, location_id) on delete restrict,
   -- a product sits in one bin per place
   constraint item_bins_one_per_place_uq unique (location_id, item_id)
 );
-create index item_bins_bin_idx on public.item_bins (bin_id);
+create index item_bins_bin_idx on inventory.item_bins (bin_id);
 
 -- The code and "who changed it" are filled in by the database, not by the app.
-create or replace function public.storage_bins_before_write()
+create or replace function inventory.storage_bins_before_write()
 returns trigger language plpgsql set search_path = '' as $$
 declare v_place text;
 begin
-  select l.code into v_place from public.locations l where l.id = new.location_id;
+  select l.code into v_place from inventory.locations l where l.id = new.location_id;
   if v_place is null then raise exception 'Unknown place' using errcode = 'P0001'; end if;
   if tg_op = 'INSERT' or new.rack is distinct from old.rack or new.level is distinct from old.level
      or new.bin_no is distinct from old.bin_no or new.location_id is distinct from old.location_id then
@@ -60,48 +60,48 @@ begin
   new.updated_at := now();
   return new;
 end $$;
-revoke execute on function public.storage_bins_before_write() from public, anon, authenticated;
-create trigger storage_bins_write before insert or update on public.storage_bins
-  for each row execute function public.storage_bins_before_write();
-create trigger storage_bins_audit after insert or update or delete on public.storage_bins
-  for each row execute function public.log_audit();
+revoke execute on function inventory.storage_bins_before_write() from public, anon, authenticated;
+create trigger storage_bins_write before insert or update on inventory.storage_bins
+  for each row execute function inventory.storage_bins_before_write();
+create trigger storage_bins_audit after insert or update or delete on inventory.storage_bins
+  for each row execute function inventory.log_audit();
 
-create or replace function public.item_bins_before_insert()
+create or replace function inventory.item_bins_before_insert()
 returns trigger language plpgsql set search_path = '' as $$
 begin
   new.created_by := (select auth.uid());
   return new;
 end $$;
-revoke execute on function public.item_bins_before_insert() from public, anon, authenticated;
-create trigger item_bins_write before insert on public.item_bins
-  for each row execute function public.item_bins_before_insert();
-create trigger item_bins_audit after insert or update or delete on public.item_bins
-  for each row execute function public.log_audit();
+revoke execute on function inventory.item_bins_before_insert() from public, anon, authenticated;
+create trigger item_bins_write before insert on inventory.item_bins
+  for each row execute function inventory.item_bins_before_insert();
+create trigger item_bins_audit after insert or update or delete on inventory.item_bins
+  for each row execute function inventory.log_audit();
 
-alter table public.storage_bins enable row level security;
-alter table public.item_bins enable row level security;
+alter table inventory.storage_bins enable row level security;
+alter table inventory.item_bins enable row level security;
 
-create policy storage_bins_select on public.storage_bins for select to authenticated
-  using ((select public.can_access_location(location_id)) or (select public.has_permission('locations.manage')));
-create policy storage_bins_insert on public.storage_bins for insert to authenticated
-  with check ((select public.has_permission('locations.manage')));
-create policy storage_bins_update on public.storage_bins for update to authenticated
-  using ((select public.has_permission('locations.manage'))) with check ((select public.has_permission('locations.manage')));
+create policy storage_bins_select on inventory.storage_bins for select to authenticated
+  using ((select inventory.can_access_location(location_id)) or (select inventory.has_permission('locations.manage')));
+create policy storage_bins_insert on inventory.storage_bins for insert to authenticated
+  with check ((select inventory.has_permission('locations.manage')));
+create policy storage_bins_update on inventory.storage_bins for update to authenticated
+  using ((select inventory.has_permission('locations.manage'))) with check ((select inventory.has_permission('locations.manage')));
 
-create policy item_bins_select on public.item_bins for select to authenticated
-  using ((select public.can_access_location(location_id)) or (select public.has_permission('locations.manage')));
-create policy item_bins_insert on public.item_bins for insert to authenticated
-  with check ((select public.has_permission('locations.manage')));
+create policy item_bins_select on inventory.item_bins for select to authenticated
+  using ((select inventory.can_access_location(location_id)) or (select inventory.has_permission('locations.manage')));
+create policy item_bins_insert on inventory.item_bins for insert to authenticated
+  with check ((select inventory.has_permission('locations.manage')));
 -- Moving a product out of a bin is not history (the stock ledger is untouched), so it may be deleted.
-create policy item_bins_delete on public.item_bins for delete to authenticated
-  using ((select public.has_permission('locations.manage')));
+create policy item_bins_delete on inventory.item_bins for delete to authenticated
+  using ((select inventory.has_permission('locations.manage')));
 
-revoke all on public.storage_bins, public.item_bins from anon;
-grant select, insert, update on public.storage_bins to authenticated;
-grant select, insert, delete on public.item_bins to authenticated;
+revoke all on inventory.storage_bins, inventory.item_bins from anon;
+grant select, insert, update on inventory.storage_bins to authenticated;
+grant select, insert, delete on inventory.item_bins to authenticated;
 
 -- One call for the Locations (Racks) screen. Runs as the caller (SECURITY INVOKER).
-create or replace function public.bins_page(
+create or replace function inventory.bins_page(
   p_q text default null,
   p_location uuid default null,
   p_rack text default null,
@@ -136,11 +136,11 @@ begin
            coalesce(a.items, 0) as items, coalesce(a.qty, 0) as qty,
            case when b.is_blocked then 'blocked' when coalesce(a.qty, 0) > 0 then 'occupied' else 'available' end as status,
            case when b.capacity is not null and b.capacity > 0 then round(coalesce(a.qty, 0) * 100.0 / b.capacity) end as utilization
-      from public.storage_bins b
-      join public.locations l on l.id = b.location_id
+      from inventory.storage_bins b
+      join inventory.locations l on l.id = b.location_id
       left join (select ib.bin_id, count(*) as items, sum(coalesce(so.quantity, 0)) as qty
-                   from public.item_bins ib
-                   left join public.stock_overview so on so.item_id = ib.item_id and so.location_id = ib.location_id
+                   from inventory.item_bins ib
+                   left join inventory.stock_overview so on so.item_id = ib.item_id and so.location_id = ib.location_id
                   group by ib.bin_id) a on a.bin_id = b.id
   ),
   filtered as (
@@ -149,7 +149,7 @@ begin
        and (coalesce(p_rack, '') = '' or x.rack = p_rack)
        and (coalesce(p_status, '') in ('', 'all') or x.status = p_status)
        and (coalesce(p_q, '') = '' or x.code ilike v_like or x.place_name ilike v_like or x.rack ilike v_like
-            or exists (select 1 from public.item_bins ib join public.items i on i.id = ib.item_id
+            or exists (select 1 from inventory.item_bins ib join inventory.items i on i.id = ib.item_id
                         where ib.bin_id = x.id and (i.internal_item_code ilike v_like or i.item_name ilike v_like)))
   )
   select jsonb_build_object(
@@ -158,7 +158,7 @@ begin
                from (select * from filtered order by code limit v_limit offset v_offset) t),
     'racks', (select coalesce(jsonb_agg(distinct rack order by rack), '[]'::jsonb) from base where p_location is null or location_id = p_location),
     'places', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'code', code, 'name', name) order by name), '[]'::jsonb)
-                 from public.locations where type <> 'TRANSIT' and is_active),
+                 from inventory.locations where type <> 'TRANSIT' and is_active),
     'kpi', jsonb_build_object(
       'total', (select count(*) from base),
       'occupied', (select count(*) from base where status = 'occupied'),
@@ -169,5 +169,5 @@ begin
   return v_result;
 end $$;
 
-revoke execute on function public.bins_page(text, uuid, text, text, int, int) from public, anon;
-grant execute on function public.bins_page(text, uuid, text, text, int, int) to authenticated;
+revoke execute on function inventory.bins_page(text, uuid, text, text, int, int) from public, anon;
+grant execute on function inventory.bins_page(text, uuid, text, text, int, int) to authenticated;

@@ -8,7 +8,7 @@
 -- Return = number of returns on the order that were not rejected (a person who may not see returns sees 0). "Return Orders" = orders with at least one such return.
 -- Dispatch status = the status of the parcel (Dispatched, In Transit, Delivered, ...); a person who may not see dispatches sees "Dispatched". There is NO payment status: the system has no customer payments (owner: later).
 -- Runs as the caller (SECURITY INVOKER): row-level security decides which orders, customers and items are visible. Nothing is changed here.
-create or replace function public.sales_report(
+create or replace function inventory.sales_report(
   p_tab text default 'orders',      -- orders | product | channel | customer | city | monthly | comparison
   p_q text default null,
   p_channel text default null,
@@ -36,7 +36,7 @@ declare
   v_pfrom date;
   v_result jsonb;
 begin
-  if not (public.has_permission('sales_orders.view') or public.has_permission('sales_orders.create') or public.has_permission('sales_orders.confirm')) then
+  if not (inventory.has_permission('sales_orders.view') or inventory.has_permission('sales_orders.create') or inventory.has_permission('sales_orders.confirm')) then
     raise exception 'You do not have permission to see sales orders' using errcode = '42501';
   end if;
   if p_tab is null or p_tab not in ('orders', 'product', 'channel', 'customer', 'city', 'monthly', 'comparison') then raise exception 'Unknown report tab' using errcode = 'P0001'; end if;
@@ -53,11 +53,11 @@ begin
     select o.id as oid, o.order_no, o.order_date, o.channel, o.discount, o.shipping_charges,
            cu.id as cid, cu.name as cname, cu.customer_type as ctype, coalesce(nullif(btrim(cu.city), ''), 'Not set') as city,
            l.item_id, i.internal_item_code as code, i.item_name, i.unit, c.id as category_id, coalesce(c.name, 'No category') as category_name, l.quantity as qty, l.rate
-      from public.sales_order_lines l
-      join public.sales_orders o on o.id = l.order_id and o.status = 'DISPATCHED'
-      join public.customers cu on cu.id = o.customer_id
-      join public.items i on i.id = l.item_id
-      left join public.categories c on c.id = i.category_id
+      from inventory.sales_order_lines l
+      join inventory.sales_orders o on o.id = l.order_id and o.status = 'DISPATCHED'
+      join inventory.customers cu on cu.id = o.customer_id
+      join inventory.items i on i.id = l.item_id
+      left join inventory.categories c on c.id = i.category_id
   ),
   qox as (   -- orders that pass every filter except the date range
     select distinct s.oid from sl s
@@ -74,8 +74,8 @@ begin
      group by s.oid, s.order_no, s.order_date, s.channel, s.cid, s.cname, s.ctype, s.city, s.discount, s.shipping_charges
   ),
   so as (
-    select x.*, coalesce(d.status, 'DISPATCHED') as dispatch_status, (select count(*) from public.sales_returns r where r.order_id = x.oid and r.status <> 'REJECTED') as returns
-      from sox x left join public.dispatches d on d.order_id = x.oid
+    select x.*, coalesce(d.status, 'DISPATCHED') as dispatch_status, (select count(*) from inventory.sales_returns r where r.order_id = x.oid and r.status <> 'REJECTED') as returns
+      from sox x left join inventory.dispatches d on d.order_id = x.oid
      where (p_from is null or x.order_date >= p_from) and (p_to is null or x.order_date <= p_to)
   ),
   slq as (   -- lines of the orders in the range (with the category filter applied to the lines)
@@ -88,7 +88,7 @@ begin
   ),
   cmpm as (
     select per, count(*) as orders, coalesce(sum(qty), 0) as qty, coalesce(sum(net), 0) as net, count(distinct cid) as customers,
-           (select count(*) from public.sales_returns r join cmp c2 on c2.oid = r.order_id and c2.per = cmp.per where r.status <> 'REJECTED') as returns
+           (select count(*) from inventory.sales_returns r join cmp c2 on c2.oid = r.order_id and c2.per = cmp.per where r.status <> 'REJECTED') as returns
       from cmp group by per
   ),
   trend as (
@@ -123,7 +123,7 @@ begin
                     union all select 5, 'Customers', (select customers from cmpm where per = 'cur'), (select customers from cmpm where per = 'prev')
                     union all select 6, 'Returns', (select returns from cmpm where per = 'cur'), (select returns from cmpm where per = 'prev')) m) end,
     'compare_range', jsonb_build_object('cur_from', v_cfrom, 'cur_to', v_cto, 'prev_from', v_pfrom, 'prev_to', v_pto),
-    'categories', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.categories),
+    'categories', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.categories),
     'kpi', jsonb_build_object(
       'orders', (select count(*) from so), 'sales', (select coalesce(sum(net), 0) from so), 'items_sold', (select coalesce(sum(qty), 0) from so),
       'avg', (select case when count(*) > 0 then sum(net) / count(*) end from so), 'customers', (select count(distinct cid) from so), 'return_orders', (select count(*) from so where returns > 0)),
@@ -137,5 +137,5 @@ begin
   return v_result;
 end $$;
 
-revoke execute on function public.sales_report(text, text, text, uuid, text, date, date, int, int) from public, anon;
-grant execute on function public.sales_report(text, text, text, uuid, text, date, date, int, int) to authenticated;
+revoke execute on function inventory.sales_report(text, text, text, uuid, text, date, date, int, int) from public, anon;
+grant execute on function inventory.sales_report(text, text, text, uuid, text, date, date, int, int) to authenticated;

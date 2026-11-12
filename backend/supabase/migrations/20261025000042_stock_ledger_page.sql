@@ -6,19 +6,19 @@
 
 -- A short display name ("Amit K.") for the User column. People cannot read each other's profiles (row rules), so this small
 -- helper gives out ONLY first name + initial of the last name, and only to people who may see stock.
-create or replace function public.person_name(p_id uuid)
+create or replace function inventory.person_name(p_id uuid)
 returns text language sql stable security definer set search_path = '' as $$
-  select case when public.has_permission('stock.view') then
+  select case when inventory.has_permission('stock.view') then
     (select case when coalesce(nullif(btrim(full_name), ''), '') = '' then split_part(email, '@', 1)
                  when array_length(regexp_split_to_array(btrim(full_name), '\s+'), 1) > 1
                    then (regexp_split_to_array(btrim(full_name), '\s+'))[1] || ' ' || left((regexp_split_to_array(btrim(full_name), '\s+'))[array_length(regexp_split_to_array(btrim(full_name), '\s+'), 1)], 1) || '.'
                  else btrim(full_name) end
-       from public.profiles where id = p_id) end;
+       from inventory.people where id = p_id) end;
 $$;
-revoke execute on function public.person_name(uuid) from public, anon;
-grant execute on function public.person_name(uuid) to authenticated;
+revoke execute on function inventory.person_name(uuid) from public, anon;
+grant execute on function inventory.person_name(uuid) to authenticated;
 
-create or replace function public.stock_ledger_page(
+create or replace function inventory.stock_ledger_page(
   p_q text default null,
   p_category uuid default null,
   p_location uuid default null,
@@ -40,7 +40,7 @@ declare
   v_offset int := greatest(coalesce(p_offset, 0), 0);
   v_result jsonb;
 begin
-  if not public.has_permission('stock.view') then
+  if not inventory.has_permission('stock.view') then
     raise exception 'You do not have permission to see stock' using errcode = '42501';
   end if;
   if p_type is not null and p_type not in ('', 'all', 'OPENING', 'RECEIPT', 'SALE', 'SALE_RETURN', 'TRANSFER', 'TRANSFER_SHORTAGE', 'ADJUSTMENT', 'STOCK_OUT') then
@@ -50,22 +50,22 @@ begin
 
   with raw as (
     select m.id, m.created_at, m.movement_type::text as typ, m.reference, m.reason, m.created_by, m.item_id, m.to_location_id as location_id, m.quantity as delta
-      from public.stock_movements m where m.to_location_id is not null
+      from inventory.stock_movements m where m.to_location_id is not null
     union all
     select m.id, m.created_at, m.movement_type::text, m.reference, m.reason, m.created_by, m.item_id, m.from_location_id, -m.quantity
-      from public.stock_movements m where m.from_location_id is not null
+      from inventory.stock_movements m where m.from_location_id is not null
   ),
   lines as (
     select r.*, l.name as place_name,
            sum(r.delta) over (partition by r.item_id, r.location_id order by r.id rows between unbounded preceding and current row) as balance
-      from raw r join public.locations l on l.id = r.location_id and l.type <> 'TRANSIT'
+      from raw r join inventory.locations l on l.id = r.location_id and l.type <> 'TRANSIT'
   ),
   base as (
     select ln.id, ln.created_at, ln.typ, ln.reference, ln.reason, ln.item_id, ln.location_id, ln.place_name, ln.delta, ln.balance,
            case when ln.delta > 0 then ln.delta end as in_qty, case when ln.delta < 0 then -ln.delta end as out_qty,
            ln.created_by,
            i.internal_item_code as code, i.item_name, i.unit, c.id as category_id
-      from lines ln join public.items i on i.id = ln.item_id left join public.categories c on c.id = i.category_id
+      from lines ln join inventory.items i on i.id = ln.item_id left join inventory.categories c on c.id = i.category_id
   ),
   filtered as (
     select b.* from base b
@@ -79,10 +79,10 @@ begin
   select jsonb_build_object(
     'total', (select count(*) from filtered),
     'rows', (select coalesce(jsonb_agg(to_jsonb(t) order by t.created_at desc, t.id desc), '[]'::jsonb)
-               from (select f.*, public.person_name(f.created_by) as user_name
+               from (select f.*, inventory.person_name(f.created_by) as user_name
                        from (select * from filtered order by created_at desc, id desc limit v_limit offset v_offset) f) t),
-    'categories', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.categories),
-    'places', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.locations where is_active and type <> 'TRANSIT'),
+    'categories', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.categories),
+    'places', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.locations where is_active and type <> 'TRANSIT'),
     'kpi', jsonb_build_object(
       'total', (select count(*) from base),
       'in', (select coalesce(sum(in_qty), 0) from base),
@@ -94,5 +94,5 @@ begin
   return v_result;
 end $$;
 
-revoke execute on function public.stock_ledger_page(text, uuid, uuid, text, date, date, int, int) from public, anon;
-grant execute on function public.stock_ledger_page(text, uuid, uuid, text, date, date, int, int) to authenticated;
+revoke execute on function inventory.stock_ledger_page(text, uuid, uuid, text, date, date, int, int) from public, anon;
+grant execute on function inventory.stock_ledger_page(text, uuid, uuid, text, date, date, int, int) to authenticated;

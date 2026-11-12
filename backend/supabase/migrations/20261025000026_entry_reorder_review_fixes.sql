@@ -5,7 +5,7 @@
 -- 3. reorder_suggestions: only real demand counts (sales and stock outs marked sold); damaged, lost,
 --    samples, own use and returns to the supplier no longer inflate the order quantity.
 
-create or replace function public.create_stock_entry(p_header jsonb, p_lines jsonb)
+create or replace function inventory.create_stock_entry(p_header jsonb, p_lines jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   v_loc uuid := (p_header->>'location_id')::uuid;
@@ -17,13 +17,13 @@ declare
   v_id uuid; v_no text; v_n int; v_label text;
   x record; v_dec smallint; v_code text; v_have numeric;
 begin
-  if not public.has_permission('stock.entry') then
+  if not inventory.has_permission('stock.entry') then
     raise exception 'missing permission: stock.entry' using errcode = '42501';
   end if;
-  if not public.can_access_location(v_loc) then
+  if not inventory.can_access_location(v_loc) then
     raise exception 'you do not work in this location' using errcode = '42501';
   end if;
-  if not exists (select 1 from public.locations where id = v_loc and is_active and type <> 'TRANSIT') then
+  if not exists (select 1 from inventory.locations where id = v_loc and is_active and type <> 'TRANSIT') then
     raise exception 'location not found or archived';
   end if;
   if v_dir not in ('IN', 'OUT') then raise exception 'Choose Stock In or Stock Out'; end if;
@@ -50,7 +50,7 @@ begin
 
   for x in select * from jsonb_to_recordset(p_lines) as t(item_id uuid, quantity numeric) loop
     select i.internal_item_code, u.decimals into v_code, v_dec
-      from public.items i join public.units u on u.code = i.unit
+      from inventory.items i join inventory.units u on u.code = i.unit
      where i.id = x.item_id and i.is_active;
     if not found then
       v_errors := v_errors || jsonb_build_object('item_id', x.item_id, 'message', 'Item not found or archived');
@@ -61,7 +61,7 @@ begin
         'message', case when v_dec = 0 then 'This item is counted in whole numbers' else 'At most ' || v_dec || ' decimals for this unit' end);
     elsif v_dir = 'OUT' then
       v_have := 0; -- no balance row means nothing in stock (SELECT INTO keeps the old value when no row)
-      select coalesce(quantity, 0) into v_have from public.stock_balances where item_id = x.item_id and location_id = v_loc for update;
+      select coalesce(quantity, 0) into v_have from inventory.stock_balances where item_id = x.item_id and location_id = v_loc for update;
       if coalesce(v_have, 0) < x.quantity then
         v_errors := v_errors || jsonb_build_object('item_id', x.item_id, 'code', v_code, 'message', 'Only ' || coalesce(v_have, 0) || ' in stock here');
       end if;
@@ -75,28 +75,28 @@ begin
     return jsonb_build_object('ok', false, 'errors', v_errors);
   end if;
 
-  insert into public.stock_entries (location_id, direction, reason, reference, remarks)
+  insert into inventory.stock_entries (location_id, direction, reason, reference, remarks)
   values (v_loc, v_dir, v_reason, v_ref, v_rem) returning id, entry_no into v_id, v_no;
-  insert into public.stock_entry_lines (entry_id, item_id, quantity)
+  insert into inventory.stock_entry_lines (entry_id, item_id, quantity)
   select v_id, t.item_id, t.quantity from jsonb_to_recordset(p_lines) as t(item_id uuid, quantity numeric);
 
-  insert into public.stock_movements (item_id, from_location_id, to_location_id, quantity, movement_type, reason, reference)
+  insert into inventory.stock_movements (item_id, from_location_id, to_location_id, quantity, movement_type, reason, reference)
   select t.item_id,
          case when v_dir = 'OUT' then v_loc end,
          case when v_dir = 'IN' then v_loc end,
          t.quantity,
-         (case when v_dir = 'OUT' then 'STOCK_OUT' else 'STOCK_IN' end)::public.stock_movement_type,
+         (case when v_dir = 'OUT' then 'STOCK_OUT' else 'STOCK_IN' end)::inventory.stock_movement_type,
          left(v_label || coalesce(': ' || v_rem, ''), 300), -- stock_movements.reason allows 300 characters
          v_no
     from jsonb_to_recordset(p_lines) as t(item_id uuid, quantity numeric);
 
-  insert into public.audit_log (actor, action, entity, entity_id, details)
+  insert into inventory.audit_log (actor, action, entity, entity_id, details)
   values ((select auth.uid()), 'STOCK_ENTRY', 'stock_entries', v_id::text,
           jsonb_build_object('entry_no', v_no, 'direction', v_dir, 'reason', v_reason, 'lines', v_n, 'location_id', v_loc));
   return jsonb_build_object('ok', true, 'id', v_id, 'entry_no', v_no, 'errors', '[]'::jsonb);
 end $$;
 
-create or replace function public.reorder_suggestions(p_location uuid default null, p_days integer default 30)
+create or replace function inventory.reorder_suggestions(p_location uuid default null, p_days integer default 30)
 returns table (
   item_id uuid, internal_item_code text, item_name text, unit text,
   location_id uuid, location_code text,
@@ -107,7 +107,7 @@ returns table (
 )
 language plpgsql stable security invoker set search_path = '' as $$
 begin
-  if not (public.has_permission('stock.view') and public.has_permission('items.view')) then
+  if not (inventory.has_permission('stock.view') and inventory.has_permission('items.view')) then
     raise exception 'Reorder suggestions need the stock.view and items.view permissions' using errcode = 'P0001';
   end if;
   if p_days is null or p_days < 7 or p_days > 365 then
@@ -118,36 +118,36 @@ begin
     -- demand that left the place: sales, stock outs marked "sold" (for example billed in Zoho), transfers sent away.
     -- Damaged, lost, samples, own use and returns to the supplier are NOT demand.
     select m.item_id as fi, m.from_location_id as fl, sum(m.quantity) as q
-      from public.stock_movements m
+      from inventory.stock_movements m
      where m.from_location_id is not null
        and m.created_at >= now() - make_interval(days => p_days)
        and (m.movement_type = 'SALE'
             or m.movement_type = 'TRANSFER'
             or (m.movement_type = 'STOCK_OUT'
-                and exists (select 1 from public.stock_entries e where e.entry_no = m.reference and e.reason = 'SOLD_OUTSIDE')))
+                and exists (select 1 from inventory.stock_entries e where e.entry_no = m.reference and e.reason = 'SOLD_OUTSIDE')))
      group by 1, 2
   ), back as (
     -- what came back and must not count as demand: voided bills, and recalled transfers (the goods return from the
     -- in-transit place to the place that sent them, with the same transfer number).
     select m.item_id as bi, m.to_location_id as bl, sum(m.quantity) as q
-      from public.stock_movements m
+      from inventory.stock_movements m
      where m.to_location_id is not null
        and m.created_at >= now() - make_interval(days => p_days)
        and (m.movement_type = 'SALE_RETURN'
             or (m.movement_type = 'TRANSFER'
-                and exists (select 1 from public.stock_movements s
+                and exists (select 1 from inventory.stock_movements s
                              where s.reference = m.reference and s.movement_type = 'TRANSFER'
                                and s.item_id = m.item_id
                                and s.from_location_id = m.to_location_id and s.to_location_id = m.from_location_id)))
      group by 1, 2
   ), po as (
     select pl.item_id as pi, o.location_id as plo, sum(pl.quantity - pl.received_qty) as q
-      from public.purchase_order_lines pl join public.purchase_orders o on o.id = pl.po_id
+      from inventory.purchase_order_lines pl join inventory.purchase_orders o on o.id = pl.po_id
      where o.status in ('SENT', 'PARTIAL')
      group by 1, 2
   ), tr as (
     select tl.item_id as ti, t.to_location_id as tlo, sum(tl.quantity_sent) as q
-      from public.stock_transfer_lines tl join public.stock_transfers t on t.id = tl.transfer_id
+      from inventory.stock_transfer_lines tl join inventory.stock_transfers t on t.id = tl.transfer_id
      where t.status = 'SENT'
      group by 1, 2
   ), base as (
@@ -156,10 +156,10 @@ begin
            i.lead_time_days as b_lead, i.safety_factor as b_safety, i.moq as b_moq, u.decimals as b_dec,
            coalesce(po.q, 0) as b_po, coalesce(tr.q, 0) as b_tr,
            greatest(coalesce(flow.q, 0) - coalesce(back.q, 0), 0) as b_consumed
-      from public.stock_overview so
-      join public.locations l on l.id = so.location_id
-      join public.items i on i.id = so.item_id
-      join public.units u on u.code = i.unit
+      from inventory.stock_overview so
+      join inventory.locations l on l.id = so.location_id
+      join inventory.items i on i.id = so.item_id
+      join inventory.units u on u.code = i.unit
       left join flow on flow.fi = so.item_id and flow.fl = so.location_id
       left join back on back.bi = so.item_id and back.bl = so.location_id
       left join po on po.pi = so.item_id and po.plo = so.location_id

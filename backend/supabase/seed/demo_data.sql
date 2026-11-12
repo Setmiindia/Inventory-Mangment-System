@@ -7,18 +7,18 @@ do $$
 declare
   wh uuid; s1 uuid; s2 uuid; c_cab uuid; c_acc uuid; it uuid; r record;
 begin
-  if exists (select 1 from public.items where internal_item_code like 'DEMO-%') then
+  if exists (select 1 from inventory.items where internal_item_code like 'DEMO-%') then
     raise notice 'Demo data already loaded, nothing done.';
     return;
   end if;
 
-  insert into public.categories (name) values ('DEMO CABLES'), ('DEMO ACCESSORIES') on conflict do nothing;
-  select id into c_cab from public.categories where name = 'DEMO CABLES';
-  select id into c_acc from public.categories where name = 'DEMO ACCESSORIES';
+  insert into inventory.categories (name) values ('DEMO CABLES'), ('DEMO ACCESSORIES') on conflict do nothing;
+  select id into c_cab from inventory.categories where name = 'DEMO CABLES';
+  select id into c_acc from inventory.categories where name = 'DEMO ACCESSORIES';
 
-  insert into public.locations (code, name, type, address) values ('DEMO-WH', 'Demo main warehouse', 'WAREHOUSE', 'Demo address') returning id into wh;
-  insert into public.locations (code, name, type, address) values ('DEMO-SHOP1', 'Demo shop 1', 'SHOP', 'Demo address') returning id into s1;
-  insert into public.locations (code, name, type, address) values ('DEMO-SHOP2', 'Demo shop 2', 'SHOP', 'Demo address') returning id into s2;
+  insert into inventory.locations (code, name, type, address) values ('DEMO-WH', 'Demo main warehouse', 'WAREHOUSE', 'Demo address') returning id into wh;
+  insert into inventory.locations (code, name, type, address) values ('DEMO-SHOP1', 'Demo shop 1', 'SHOP', 'Demo address') returning id into s1;
+  insert into inventory.locations (code, name, type, address) values ('DEMO-SHOP2', 'Demo shop 2', 'SHOP', 'Demo address') returning id into s2;
 
   for r in
     select * from (values
@@ -37,23 +37,23 @@ begin
       ('DEMO-SOLDER-SET',   'DEMO SOLDERING SET',                 'SET', 2, 'LOCAL',   25,             3,           2,          2)
     ) as t(code, name, unit, cat, src, q_wh, q_s1, q_s2, min_shop)
   loop
-    insert into public.items (internal_item_code, item_name, selling_item_name, category_id, purchase_source, unit)
-    values (r.code, r.name, r.name, case r.cat when 1 then c_cab else c_acc end, r.src::public.purchase_source, r.unit)
+    insert into inventory.items (internal_item_code, item_name, selling_item_name, category_id, purchase_source, unit)
+    values (r.code, r.name, r.name, case r.cat when 1 then c_cab else c_acc end, r.src::inventory.purchase_source, r.unit)
     returning id into it;
 
-    if r.q_wh > 0 then insert into public.stock_movements (item_id, to_location_id, quantity, movement_type, reason) values (it, wh, r.q_wh, 'OPENING', 'Demo opening stock'); end if;
-    if r.q_s1 > 0 then insert into public.stock_movements (item_id, to_location_id, quantity, movement_type, reason) values (it, s1, r.q_s1, 'OPENING', 'Demo opening stock'); end if;
-    if r.q_s2 > 0 then insert into public.stock_movements (item_id, to_location_id, quantity, movement_type, reason) values (it, s2, r.q_s2, 'OPENING', 'Demo opening stock'); end if;
+    if r.q_wh > 0 then insert into inventory.stock_movements (item_id, to_location_id, quantity, movement_type, reason) values (it, wh, r.q_wh, 'OPENING', 'Demo opening stock'); end if;
+    if r.q_s1 > 0 then insert into inventory.stock_movements (item_id, to_location_id, quantity, movement_type, reason) values (it, s1, r.q_s1, 'OPENING', 'Demo opening stock'); end if;
+    if r.q_s2 > 0 then insert into inventory.stock_movements (item_id, to_location_id, quantity, movement_type, reason) values (it, s2, r.q_s2, 'OPENING', 'Demo opening stock'); end if;
 
-    insert into public.reorder_levels (item_id, location_id, min_qty) values (it, s1, r.min_shop), (it, s2, r.min_shop);
-    perform public._generate_item_barcode(it);
+    insert into inventory.reorder_levels (item_id, location_id, min_qty) values (it, s1, r.min_shop), (it, s2, r.min_shop);
+    perform inventory._generate_item_barcode(it);
   end loop;
 
   -- a transfer and a correction, so the history page has something to show
-  insert into public.stock_movements (item_id, from_location_id, to_location_id, quantity, movement_type, reason)
-    select id, wh, s1, 10, 'TRANSFER', 'Demo: refill shop 1' from public.items where internal_item_code = 'DEMO-HDMI-5M';
-  insert into public.stock_movements (item_id, from_location_id, to_location_id, quantity, movement_type, reason)
-    select id, s1, null, 2, 'ADJUSTMENT', 'Demo: damaged' from public.items where internal_item_code = 'DEMO-UHF-PLUG';
+  insert into inventory.stock_movements (item_id, from_location_id, to_location_id, quantity, movement_type, reason)
+    select id, wh, s1, 10, 'TRANSFER', 'Demo: refill shop 1' from inventory.items where internal_item_code = 'DEMO-HDMI-5M';
+  insert into inventory.stock_movements (item_id, from_location_id, to_location_id, quantity, movement_type, reason)
+    select id, s1, null, 2, 'ADJUSTMENT', 'Demo: damaged' from inventory.items where internal_item_code = 'DEMO-UHF-PLUG';
 
   raise notice 'Demo data loaded: 3 locations, 12 items.';
 end $$;

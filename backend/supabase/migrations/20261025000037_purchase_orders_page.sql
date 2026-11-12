@@ -2,7 +2,7 @@
 -- (Import / Domestic, from the supplier's type), number of items, order value and an "overdue" flag, plus the top numbers.
 -- The order value is returned only to people who may see buying prices (receipts.cost); for everybody else it is null.
 -- Runs as the caller (SECURITY INVOKER): row-level security decides which orders are visible.
-create or replace function public.purchase_orders_page(
+create or replace function inventory.purchase_orders_page(
   p_q text default null,
   p_supplier uuid default null,
   p_type text default null,      -- LOCAL | IMPORT
@@ -23,10 +23,10 @@ declare
   v_limit int := least(greatest(coalesce(p_limit, 10), 1), 100);
   v_offset int := greatest(coalesce(p_offset, 0), 0);
   v_today date := (now() at time zone 'Asia/Kolkata')::date;
-  v_cost boolean := public.has_permission('receipts.cost');
+  v_cost boolean := inventory.has_permission('receipts.cost');
   v_result jsonb;
 begin
-  if not (public.has_permission('purchase.view') or public.has_permission('purchase.create') or public.has_permission('purchase.approve')) then
+  if not (inventory.has_permission('purchase.view') or inventory.has_permission('purchase.create') or inventory.has_permission('purchase.approve')) then
     raise exception 'You do not have permission to see purchase orders' using errcode = '42501';
   end if;
   if p_status is not null and p_status not in ('', 'all', 'DRAFT', 'SENT', 'PARTIAL', 'COMPLETED', 'CANCELLED', 'OVERDUE') then
@@ -44,12 +44,12 @@ begin
            s.id as supplier_id, s.name as supplier_name, s.country as supplier_country, s.supplier_type::text as supplier_type,
            coalesce(t.items, 0) as items, coalesce(t.qty, 0) as qty,
            case when v_cost then coalesce(t.value, 0) end as value
-      from public.purchase_orders o
-      join public.suppliers s on s.id = o.supplier_id
-      join public.locations l on l.id = o.location_id
+      from inventory.purchase_orders o
+      join inventory.suppliers s on s.id = o.supplier_id
+      join inventory.locations l on l.id = o.location_id
       left join (select pl.po_id, count(*) as items, sum(pl.quantity) as qty, sum(pl.quantity * coalesce(c.unit_cost, 0)) as value
-                   from public.purchase_order_lines pl
-                   left join public.purchase_order_costs c on c.line_id = pl.id
+                   from inventory.purchase_order_lines pl
+                   left join inventory.purchase_order_costs c on c.line_id = pl.id
                   group by pl.po_id) t on t.po_id = o.id
   ),
   filtered as (
@@ -62,14 +62,14 @@ begin
        and (p_from is null or b.order_date >= p_from)
        and (p_to is null or b.order_date <= p_to)
        and (coalesce(p_q, '') = '' or b.po_no ilike v_like or b.supplier_name ilike v_like
-            or exists (select 1 from public.purchase_order_lines pl join public.items i on i.id = pl.item_id
+            or exists (select 1 from inventory.purchase_order_lines pl join inventory.items i on i.id = pl.item_id
                         where pl.po_id = b.id and (i.internal_item_code ilike v_like or i.item_name ilike v_like)))
   )
   select jsonb_build_object(
     'total', (select count(*) from filtered),
     'rows', (select coalesce(jsonb_agg(to_jsonb(t) order by t.created_at desc), '[]'::jsonb)
                from (select * from filtered order by created_at desc, po_no desc limit v_limit offset v_offset) t),
-    'suppliers', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.suppliers where is_active),
+    'suppliers', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.suppliers where is_active),
     'kpi', jsonb_build_object(
       'total', (select count(*) from base),
       'open', (select count(*) from base where status in ('DRAFT', 'SENT', 'PARTIAL')),
@@ -82,5 +82,5 @@ begin
   return v_result;
 end $$;
 
-revoke execute on function public.purchase_orders_page(text, uuid, text, text, date, date, int, int) from public, anon;
-grant execute on function public.purchase_orders_page(text, uuid, text, text, date, date, int, int) to authenticated;
+revoke execute on function inventory.purchase_orders_page(text, uuid, text, text, date, date, int, int) from public, anon;
+grant execute on function inventory.purchase_orders_page(text, uuid, text, text, date, date, int, int) to authenticated;

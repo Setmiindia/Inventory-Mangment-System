@@ -3,7 +3,7 @@
 -- Status words on the screen: Draft, In transit (SENT), Completed (RECEIVED, with a shortage tag when less arrived), Cancelled.
 -- Runs as the caller (SECURITY INVOKER): row-level security decides which transfers are visible (those that start or end at the
 -- person's places). "Requested by" uses the small helper person_name (First L.), which needs stock.view.
-create or replace function public.transfers_page(
+create or replace function inventory.transfers_page(
   p_q text default null,
   p_from_location uuid default null,
   p_to_location uuid default null,
@@ -26,8 +26,8 @@ declare
   v_today date := (now() at time zone 'Asia/Kolkata')::date;
   v_result jsonb;
 begin
-  if not (public.has_permission('transfers.view') or public.has_permission('transfers.create')
-          or public.has_permission('transfers.send') or public.has_permission('transfers.receive')) then
+  if not (inventory.has_permission('transfers.view') or inventory.has_permission('transfers.create')
+          or inventory.has_permission('transfers.send') or inventory.has_permission('transfers.receive')) then
     raise exception 'You do not have permission to see transfers' using errcode = '42501';
   end if;
   if p_status is not null and p_status not in ('', 'all', 'DRAFT', 'SENT', 'RECEIVED', 'CANCELLED') then
@@ -39,8 +39,8 @@ begin
     select t.id, t.transfer_no, t.status::text as status, t.has_shortage, t.created_at, t.created_by,
            t.from_location_id, t.from_code, t.from_name, t.to_location_id, t.to_code, t.to_name,
            coalesce(s.items, 0) as items, coalesce(s.qty, 0) as qty
-      from public.stock_transfers t
-      left join (select tl.transfer_id, count(*) as items, sum(tl.quantity_sent) as qty from public.stock_transfer_lines tl group by tl.transfer_id) s on s.transfer_id = t.id
+      from inventory.stock_transfers t
+      left join (select tl.transfer_id, count(*) as items, sum(tl.quantity_sent) as qty from inventory.stock_transfer_lines tl group by tl.transfer_id) s on s.transfer_id = t.id
   ),
   filtered as (
     select b.* from base b
@@ -50,13 +50,13 @@ begin
        and (p_from is null or (b.created_at at time zone 'Asia/Kolkata')::date >= p_from)
        and (p_to is null or (b.created_at at time zone 'Asia/Kolkata')::date <= p_to)
        and (coalesce(p_q, '') = '' or b.transfer_no ilike v_like or b.from_name ilike v_like or b.to_name ilike v_like
-            or exists (select 1 from public.stock_transfer_lines tl join public.items i on i.id = tl.item_id
+            or exists (select 1 from inventory.stock_transfer_lines tl join inventory.items i on i.id = tl.item_id
                         where tl.transfer_id = b.id and (i.internal_item_code ilike v_like or i.item_name ilike v_like)))
   )
   select jsonb_build_object(
     'total', (select count(*) from filtered),
     'rows', (select coalesce(jsonb_agg(to_jsonb(t) order by t.created_at desc, t.transfer_no desc), '[]'::jsonb)
-               from (select f.*, public.person_name(f.created_by) as requested_by
+               from (select f.*, inventory.person_name(f.created_by) as requested_by
                        from (select * from filtered order by created_at desc, transfer_no desc limit v_limit offset v_offset) f) t),
     'places', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb)
                  from (select from_location_id as id, from_name as name from base union select to_location_id, to_name from base) p),
@@ -71,5 +71,5 @@ begin
   return v_result;
 end $$;
 
-revoke execute on function public.transfers_page(text, uuid, uuid, text, date, date, int, int) from public, anon;
-grant execute on function public.transfers_page(text, uuid, uuid, text, date, date, int, int) to authenticated;
+revoke execute on function inventory.transfers_page(text, uuid, uuid, text, date, date, int, int) from public, anon;
+grant execute on function inventory.transfers_page(text, uuid, uuid, text, date, date, int, int) to authenticated;

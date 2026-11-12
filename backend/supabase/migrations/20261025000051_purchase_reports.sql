@@ -10,7 +10,7 @@
 -- search (order no, supplier, item code or name), status (DRAFT | SENT | PARTIAL | COMPLETED | CANCELLED | OVERDUE).
 -- Comparative: the date range (default: this month so far) against the period of the same length just before it.
 -- Runs as the caller (SECURITY INVOKER): row-level security decides which orders, places and prices are visible. Nothing is changed here.
-create or replace function public.purchase_report(
+create or replace function inventory.purchase_report(
   p_tab text default 'orders',      -- orders | grn | pending | supplier | category | item | monthly | comparative
   p_q text default null,
   p_supplier uuid default null,
@@ -32,7 +32,7 @@ declare
   v_like text;
   v_limit int := least(greatest(coalesce(p_limit, 10), 1), 100);
   v_offset int := greatest(coalesce(p_offset, 0), 0);
-  v_cost boolean := public.has_permission('receipts.cost');
+  v_cost boolean := inventory.has_permission('receipts.cost');
   v_today date := (now() at time zone 'Asia/Kolkata')::date;
   v_cfrom date := coalesce(p_from, date_trunc('month', (now() at time zone 'Asia/Kolkata'))::date);
   v_cto date := coalesce(p_to, (now() at time zone 'Asia/Kolkata')::date);
@@ -40,7 +40,7 @@ declare
   v_pfrom date;
   v_result jsonb;
 begin
-  if not (public.has_permission('purchase.view') or public.has_permission('purchase.create') or public.has_permission('purchase.approve')) then
+  if not (inventory.has_permission('purchase.view') or inventory.has_permission('purchase.create') or inventory.has_permission('purchase.approve')) then
     raise exception 'You do not have permission to see purchase orders' using errcode = '42501';
   end if;
   if p_tab is null or p_tab not in ('orders', 'grn', 'pending', 'supplier', 'category', 'item', 'monthly', 'comparative') then raise exception 'Unknown report tab' using errcode = 'P0001'; end if;
@@ -58,13 +58,13 @@ begin
            i.id as item_id, i.internal_item_code as code, i.item_name, i.unit, c.id as category_id, coalesce(c.name, 'No category') as category_name,
            pl.quantity as qty, pl.received_qty as recv, case when v_cost then coalesce(pc.unit_cost, 0) end as cost,
            (o.status in ('SENT', 'PARTIAL') and o.expected_date is not null and o.expected_date < v_today) as overdue
-      from public.purchase_order_lines pl
-      join public.purchase_orders o on o.id = pl.po_id
-      join public.suppliers s on s.id = o.supplier_id
-      join public.locations l on l.id = o.location_id
-      join public.items i on i.id = pl.item_id
-      left join public.categories c on c.id = i.category_id
-      left join public.purchase_order_costs pc on pc.line_id = pl.id
+      from inventory.purchase_order_lines pl
+      join inventory.purchase_orders o on o.id = pl.po_id
+      join inventory.suppliers s on s.id = o.supplier_id
+      join inventory.locations l on l.id = o.location_id
+      join inventory.items i on i.id = pl.item_id
+      left join inventory.categories c on c.id = i.category_id
+      left join inventory.purchase_order_costs pc on pc.line_id = pl.id
   ),
   polx as (   -- the filters except the date range
     select p.* from pol p
@@ -91,13 +91,13 @@ begin
   grnl as (   -- lines of POSTED goods receipts with the cost on the receipt
     select r.id as rid, r.receipt_no, r.receipt_date, r.supplier_invoice_no, r.posted_at, r.posted_by, s.id as sid, s.name as sname, l.id as lid, l.name as lname,
            i.internal_item_code as code, i.item_name, c.id as category_id, gl.quantity as qty, case when v_cost then coalesce(gc.unit_cost, 0) end as cost
-      from public.goods_receipt_lines gl
-      join public.goods_receipts r on r.id = gl.receipt_id and r.status = 'POSTED'
-      join public.suppliers s on s.id = r.supplier_id
-      join public.locations l on l.id = r.location_id
-      join public.items i on i.id = gl.item_id
-      left join public.categories c on c.id = i.category_id
-      left join public.goods_receipt_costs gc on gc.line_id = gl.id
+      from inventory.goods_receipt_lines gl
+      join inventory.goods_receipts r on r.id = gl.receipt_id and r.status = 'POSTED'
+      join inventory.suppliers s on s.id = r.supplier_id
+      join inventory.locations l on l.id = r.location_id
+      join inventory.items i on i.id = gl.item_id
+      left join inventory.categories c on c.id = i.category_id
+      left join inventory.goods_receipt_costs gc on gc.line_id = gl.id
      where (p_supplier is null or s.id = p_supplier) and (p_location is null or l.id = p_location) and (p_category is null or c.id = p_category)
        and (p_from is null or r.receipt_date >= p_from) and (p_to is null or r.receipt_date <= p_to)
        and (coalesce(p_q, '') = '' or r.receipt_no ilike v_like or s.name ilike v_like or coalesce(r.supplier_invoice_no, '') ilike v_like or i.internal_item_code ilike v_like or i.item_name ilike v_like)
@@ -156,9 +156,9 @@ begin
                     union all select 5, 'Active suppliers', (select sup from cmpm where per = 'cur'), (select sup from cmpm where per = 'prev')
                     union all select 6, 'Average order value', (select case when pos > 0 then value / pos end from cmpm where per = 'cur'), (select case when pos > 0 then value / pos end from cmpm where per = 'prev')) m) end,
     'compare_range', jsonb_build_object('cur_from', v_cfrom, 'cur_to', v_cto, 'prev_from', v_pfrom, 'prev_to', v_pto),
-    'suppliers', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.suppliers),
-    'categories', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.categories),
-    'places', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.locations where is_active and type <> 'TRANSIT'),
+    'suppliers', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.suppliers),
+    'categories', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.categories),
+    'places', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.locations where is_active and type <> 'TRANSIT'),
     'kpi', jsonb_build_object(
       'pos', (select count(*) from pof),
       'value', (select case when v_cost then coalesce(sum(value), 0) end from placed),
@@ -174,14 +174,14 @@ begin
     'top_items', (select coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) from (select code, item_name, sum(qty) as qty, case when v_cost then sum(qty * cost) end as value
                                                                                from placedl group by item_id, code, item_name order by case when v_cost then sum(qty * cost) end desc nulls last, sum(qty) desc limit 5) t),
     'recent', (select coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) from (
-                 select at, po_no, activity, public.person_name(by_user) as by_name from (
-                   select o.created_at as at, o.po_no, 'PO Created' as activity, o.created_by as by_user from public.purchase_orders o
-                   union all select o.sent_at, o.po_no, 'PO Sent', o.sent_by from public.purchase_orders o where o.sent_at is not null
-                   union all select r.posted_at, r.receipt_no, 'GRN Completed', r.posted_by from public.goods_receipts r where r.status = 'POSTED' and r.posted_at is not null
+                 select at, po_no, activity, inventory.person_name(by_user) as by_name from (
+                   select o.created_at as at, o.po_no, 'PO Created' as activity, o.created_by as by_user from inventory.purchase_orders o
+                   union all select o.sent_at, o.po_no, 'PO Sent', o.sent_by from inventory.purchase_orders o where o.sent_at is not null
+                   union all select r.posted_at, r.receipt_no, 'GRN Completed', r.posted_by from inventory.goods_receipts r where r.status = 'POSTED' and r.posted_at is not null
                  ) e order by at desc limit 5) t))
   into v_result;
   return v_result;
 end $$;
 
-revoke execute on function public.purchase_report(text, text, uuid, uuid, text, uuid, date, date, int, int) from public, anon;
-grant execute on function public.purchase_report(text, text, uuid, uuid, text, uuid, date, date, int, int) to authenticated;
+revoke execute on function inventory.purchase_report(text, text, uuid, uuid, text, uuid, date, date, int, int) from public, anon;
+grant execute on function inventory.purchase_report(text, text, uuid, uuid, text, uuid, date, date, int, int) to authenticated;

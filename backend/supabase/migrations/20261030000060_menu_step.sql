@@ -3,28 +3,28 @@
 -- It only decides what the menu shows. It does NOT block a page (permissions do that) and it deletes nothing.
 -- Default is 4 = everything, so running this changes nothing until the administrator picks a lower step.
 
-alter table public.app_settings drop constraint app_settings_key_check;
-alter table public.app_settings add constraint app_settings_key_check check (key ~ '^(billing_enabled|menu_step|company\.[a-z_]{2,30})$');
+alter table inventory.app_settings drop constraint app_settings_key_check;
+alter table inventory.app_settings add constraint app_settings_key_check check (key ~ '^(billing_enabled|menu_step|company\.[a-z_]{2,30})$');
 
-insert into public.app_settings (key, value) values ('menu_step', to_jsonb(4)) on conflict (key) do nothing;
+insert into inventory.app_settings (key, value) values ('menu_step', to_jsonb(4)) on conflict (key) do nothing;
 
 -- Anybody signed in may read the step (the menu needs it); a missing or odd value means 4.
-create or replace function public.menu_step()
+create or replace function inventory.menu_step()
 returns int language sql stable security definer set search_path = '' as $$
   select coalesce((select case when jsonb_typeof(value) = 'number' and (value #>> '{}')::int between 1 and 4 then (value #>> '{}')::int end
-                     from public.app_settings where key = 'menu_step'), 4);
+                     from inventory.app_settings where key = 'menu_step'), 4);
 $$;
-revoke execute on function public.menu_step() from public, anon;
-grant execute on function public.menu_step() to authenticated;
+revoke execute on function inventory.menu_step() from public, anon;
+grant execute on function inventory.menu_step() to authenticated;
 
-create or replace function public.admin_set_menu_step(p_step int)
+create or replace function inventory.admin_set_menu_step(p_step int)
 returns void language plpgsql security definer set search_path = '' as $$
 begin
-  if not public.is_admin() then raise exception 'not allowed' using errcode = '42501'; end if;
+  if not inventory.is_admin() then raise exception 'not allowed' using errcode = '42501'; end if;
   if p_step is null or p_step not between 1 and 4 then raise exception 'The step must be 1, 2, 3 or 4' using errcode = 'P0001'; end if;
-  insert into public.app_settings (key, value, updated_at, updated_by)
+  insert into inventory.app_settings (key, value, updated_at, updated_by)
   values ('menu_step', to_jsonb(p_step), now(), (select auth.uid()))
   on conflict (key) do update set value = excluded.value, updated_at = now(), updated_by = (select auth.uid());
 end $$;
-revoke execute on function public.admin_set_menu_step(int) from public, anon;
-grant execute on function public.admin_set_menu_step(int) to authenticated;
+revoke execute on function inventory.admin_set_menu_step(int) from public, anon;
+grant execute on function inventory.admin_set_menu_step(int) to authenticated;

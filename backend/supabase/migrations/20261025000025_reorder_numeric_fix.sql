@@ -1,6 +1,6 @@
 -- Fix for 20261025000024 found by supabase/tests/016_stock_entries_and_reorder.sql: power(10, decimals)
 -- returns double precision, so the suggested quantity did not match the declared numeric column.
-create or replace function public.reorder_suggestions(p_location uuid default null, p_days integer default 30)
+create or replace function inventory.reorder_suggestions(p_location uuid default null, p_days integer default 30)
 returns table (
   item_id uuid, internal_item_code text, item_name text, unit text,
   location_id uuid, location_code text,
@@ -11,7 +11,7 @@ returns table (
 )
 language plpgsql stable security invoker set search_path = '' as $$
 begin
-  if not (public.has_permission('stock.view') and public.has_permission('items.view')) then
+  if not (inventory.has_permission('stock.view') and inventory.has_permission('items.view')) then
     raise exception 'Reorder suggestions need the stock.view and items.view permissions' using errcode = 'P0001';
   end if;
   if p_days is null or p_days < 7 or p_days > 365 then
@@ -20,25 +20,25 @@ begin
   return query
   with flow as (
     select m.item_id as fi, m.from_location_id as fl, sum(m.quantity) as q
-      from public.stock_movements m
+      from inventory.stock_movements m
      where m.from_location_id is not null
        and m.movement_type in ('SALE', 'STOCK_OUT', 'TRANSFER')
        and m.created_at >= now() - make_interval(days => p_days)
      group by 1, 2
   ), back as (
     select m.item_id as bi, m.to_location_id as bl, sum(m.quantity) as q
-      from public.stock_movements m
+      from inventory.stock_movements m
      where m.to_location_id is not null and m.movement_type = 'SALE_RETURN'
        and m.created_at >= now() - make_interval(days => p_days)
      group by 1, 2
   ), po as (
     select pl.item_id as pi, o.location_id as plo, sum(pl.quantity - pl.received_qty) as q
-      from public.purchase_order_lines pl join public.purchase_orders o on o.id = pl.po_id
+      from inventory.purchase_order_lines pl join inventory.purchase_orders o on o.id = pl.po_id
      where o.status in ('SENT', 'PARTIAL')
      group by 1, 2
   ), tr as (
     select tl.item_id as ti, t.to_location_id as tlo, sum(tl.quantity_sent) as q
-      from public.stock_transfer_lines tl join public.stock_transfers t on t.id = tl.transfer_id
+      from inventory.stock_transfer_lines tl join inventory.stock_transfers t on t.id = tl.transfer_id
      where t.status = 'SENT'
      group by 1, 2
   ), base as (
@@ -47,10 +47,10 @@ begin
            i.lead_time_days as b_lead, i.safety_factor as b_safety, i.moq as b_moq, u.decimals as b_dec,
            coalesce(po.q, 0) as b_po, coalesce(tr.q, 0) as b_tr,
            greatest(coalesce(flow.q, 0) - coalesce(back.q, 0), 0) as b_consumed
-      from public.stock_overview so
-      join public.locations l on l.id = so.location_id
-      join public.items i on i.id = so.item_id
-      join public.units u on u.code = i.unit
+      from inventory.stock_overview so
+      join inventory.locations l on l.id = so.location_id
+      join inventory.items i on i.id = so.item_id
+      join inventory.units u on u.code = i.unit
       left join flow on flow.fi = so.item_id and flow.fl = so.location_id
       left join back on back.bi = so.item_id and back.bl = so.location_id
       left join po on po.pi = so.item_id and po.plo = so.location_id

@@ -5,7 +5,7 @@
 --                                 and is left out of reorder_suggestions.
 -- HSN is only stored (no tax calculation).
 
-alter table public.items
+alter table inventory.items
   add column sub_category text check (sub_category is null or char_length(sub_category) <= 100),
   add column brand text check (brand is null or char_length(brand) <= 100),
   add column hsn_code text check (hsn_code is null or char_length(hsn_code) <= 20),
@@ -29,28 +29,28 @@ alter table public.items
   add column show_in_purchase boolean not null default true,
   add column low_stock_alert boolean not null default true;
 
-alter table public.items drop constraint items_image_paths_check;
-alter table public.items add constraint items_image_paths_check check (cardinality(image_paths) <= 6);
+alter table inventory.items drop constraint items_image_paths_check;
+alter table inventory.items add constraint items_image_paths_check check (cardinality(image_paths) <= 6);
 
 -- low stock: a switched-off item is never low
-create or replace view public.stock_overview as
+create or replace view inventory.stock_overview with (security_invoker = true) as
  select i.id as item_id, i.internal_item_code, i.item_name, i.selling_item_name, i.unit,
         l.id as location_id,
         coalesce(b.quantity, 0::numeric) as quantity,
         rl.min_qty, rl.max_qty,
         i.low_stock_alert and rl.min_qty is not null and rl.min_qty > 0::numeric and coalesce(b.quantity, 0::numeric) < rl.min_qty as is_low
-   from public.items i
-     cross join public.locations l
-     left join public.stock_balances b on b.item_id = i.id and b.location_id = l.id
-     left join public.reorder_levels rl on rl.item_id = i.id and rl.location_id = l.id
-  where i.is_active and l.is_active and l.type <> 'TRANSIT'::public.location_type
-    and (select public.has_permission('stock.view'::text));
+   from inventory.items i
+     cross join inventory.locations l
+     left join inventory.stock_balances b on b.item_id = i.id and b.location_id = l.id
+     left join inventory.reorder_levels rl on rl.item_id = i.id and rl.location_id = l.id
+  where i.is_active and l.is_active and l.type <> 'TRANSIT'::inventory.location_type
+    and (select inventory.has_permission('stock.view'::text));
 
 -- reorder list: leave out items with the low stock alert switched off
 do $$
 declare d text; d2 text;
 begin
-  select pg_get_functiondef('public.reorder_suggestions(uuid,integer)'::regprocedure) into d;
+  select pg_get_functiondef('inventory.reorder_suggestions(uuid,integer)'::regprocedure) into d;
   d2 := replace(d, 'where (p_location is null or so.location_id = p_location)
   ), calc as', 'where (p_location is null or so.location_id = p_location)
        and i.low_stock_alert
@@ -63,9 +63,9 @@ end $$;
 do $$
 declare d text; d2 text;
 begin
-  select pg_get_functiondef('public.save_sales_order(uuid,jsonb,jsonb)'::regprocedure) into d;
+  select pg_get_functiondef('inventory.save_sales_order(uuid,jsonb,jsonb)'::regprocedure) into d;
   d2 := replace(d, 'for x in select (e->>''item_id'')::uuid as item_id from jsonb_array_elements(p_lines) e group by 1 having count(*) > 1 loop',
-'for x in select i.id as item_id, i.internal_item_code as code from public.items i join jsonb_to_recordset(p_lines) as t(item_id uuid) on t.item_id = i.id where not i.show_in_sales loop
+'for x in select i.id as item_id, i.internal_item_code as code from inventory.items i join jsonb_to_recordset(p_lines) as t(item_id uuid) on t.item_id = i.id where not i.show_in_sales loop
     v_errors := v_errors || jsonb_build_object(''item_id'', x.item_id, ''code'', x.code, ''message'', ''This item is switched off for sales orders'');
   end loop;
   for x in select (e->>''item_id'')::uuid as item_id from jsonb_array_elements(p_lines) e group by 1 having count(*) > 1 loop');
@@ -77,9 +77,9 @@ end $$;
 do $$
 declare d text; d2 text;
 begin
-  select pg_get_functiondef('public.save_purchase_order(uuid,jsonb,jsonb)'::regprocedure) into d;
+  select pg_get_functiondef('inventory.save_purchase_order(uuid,jsonb,jsonb)'::regprocedure) into d;
   d2 := replace(d, 'for x in select (e->>''item_id'')::uuid as item_id, count(*) as n',
-'for x in select i.id as item_id, i.internal_item_code as code from public.items i join jsonb_to_recordset(p_lines) as t(item_id uuid) on t.item_id = i.id where not i.show_in_purchase loop
+'for x in select i.id as item_id, i.internal_item_code as code from inventory.items i join jsonb_to_recordset(p_lines) as t(item_id uuid) on t.item_id = i.id where not i.show_in_purchase loop
     v_errors := v_errors || jsonb_build_object(''item_id'', x.item_id, ''code'', x.code, ''message'', ''This item is switched off for purchase orders'');
   end loop;
   for x in select (e->>''item_id'')::uuid as item_id, count(*) as n');

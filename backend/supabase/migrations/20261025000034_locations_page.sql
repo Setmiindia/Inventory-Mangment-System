@@ -3,27 +3,27 @@
 -- "Capacity" means the number of product slots (bins) the place has; a product with stock uses one slot.
 -- Quantities of different units (pieces, metres, boxes) are never added together.
 -- All new columns are optional, so every existing place stays valid. Runs as the caller (SECURITY INVOKER).
-alter table public.locations
+alter table inventory.locations
   add column if not exists city text,
   add column if not exists capacity integer,
   add column if not exists contact_person text,
   add column if not exists phone text,
   add column if not exists email text;
 
-alter table public.locations
+alter table inventory.locations
   drop constraint if exists locations_city_len,
   drop constraint if exists locations_capacity_range,
   drop constraint if exists locations_contact_len,
   drop constraint if exists locations_phone_len,
   drop constraint if exists locations_email_len;
-alter table public.locations
+alter table inventory.locations
   add constraint locations_city_len check (city is null or char_length(city) <= 60),
   add constraint locations_capacity_range check (capacity is null or (capacity >= 0 and capacity <= 10000000)),
   add constraint locations_contact_len check (contact_person is null or char_length(contact_person) <= 100),
   add constraint locations_phone_len check (phone is null or char_length(phone) <= 30),
   add constraint locations_email_len check (email is null or char_length(email) <= 150);
 
-create or replace function public.locations_page(
+create or replace function inventory.locations_page(
   p_q text default null,
   p_type text default null,      -- WAREHOUSE | SHOP
   p_status text default null,    -- all | active | inactive
@@ -57,9 +57,9 @@ begin
            l.is_active as active, l.created_at,
            coalesce(s.products, 0) as products,
            case when l.capacity is not null and l.capacity > 0 then round(coalesce(s.products, 0) * 100.0 / l.capacity) end as utilization
-      from public.locations l
+      from inventory.locations l
       left join (select so.location_id, count(*) filter (where so.quantity > 0) as products
-                   from public.stock_overview so group by so.location_id) s on s.location_id = l.id
+                   from inventory.stock_overview so group by so.location_id) s on s.location_id = l.id
      where l.type <> 'TRANSIT'
   ),
   filtered as (
@@ -91,5 +91,5 @@ begin
   return v_result;
 end $$;
 
-revoke execute on function public.locations_page(text, text, text, text, int, int) from public, anon;
-grant execute on function public.locations_page(text, text, text, text, int, int) to authenticated;
+revoke execute on function inventory.locations_page(text, text, text, text, int, int) from public, anon;
+grant execute on function inventory.locations_page(text, text, text, text, int, int) to authenticated;

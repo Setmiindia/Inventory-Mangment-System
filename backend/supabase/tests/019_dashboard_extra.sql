@@ -3,20 +3,27 @@
 do $$
 declare v_admin uuid; v_r jsonb; v_out text := ''; v_stranger jsonb;
 begin
-  select id into v_admin from public.profiles where is_admin and is_active limit 1;
+  -- the database may hold no admin yet: make a throw-away one (rolled back with everything else)
+  if not exists (select 1 from inventory.people where is_admin and is_active) then
+    v_admin := gen_random_uuid();
+    insert into auth.users (id, email) values (v_admin, 'adm@test.local');
+    insert into public.staff_profiles (id, full_name) values (v_admin, 'adm@test.local') on conflict do nothing;
+    update inventory.user_access set is_active = true, is_admin = true where user_id = v_admin;
+  end if;
+  select id into v_admin from inventory.people where is_admin and is_active limit 1;
   perform set_config('request.jwt.claims', json_build_object('sub', v_admin, 'role', 'authenticated')::text, true);
   set local role authenticated;
-  v_r := public.dashboard_extra(null);
+  v_r := inventory.dashboard_extra(null);
   v_out := v_out || case when v_r ?& array['catalog','stock_value','status','by_category','moves_by_day','po','grn_recent','transfer_status'] then E'\nPASS admin gets all 8 sections' else E'\nFAIL a section is missing' end;
   v_out := v_out || case when jsonb_array_length(v_r->'moves_by_day') = 30 then E'\nPASS 30 days of movement' else E'\nFAIL movement days' end;
   reset role;
   perform set_config('request.jwt.claims', json_build_object('sub', gen_random_uuid(), 'role', 'authenticated')::text, true);
   set local role authenticated;
-  v_stranger := public.dashboard_extra(null);
+  v_stranger := inventory.dashboard_extra(null);
   v_out := v_out || case when v_stranger = '{}'::jsonb then E'\nPASS stranger gets nothing' else E'\nFAIL stranger got data' end;
   reset role;
   set local role anon;
-  begin perform public.dashboard_extra(null); v_out := v_out || E'\nFAIL anon can call';
+  begin perform inventory.dashboard_extra(null); v_out := v_out || E'\nFAIL anon can call';
   exception when insufficient_privilege then v_out := v_out || E'\nPASS anon denied'; end;
   reset role;
   raise exception 'TEST 019 RESULT:%', v_out;

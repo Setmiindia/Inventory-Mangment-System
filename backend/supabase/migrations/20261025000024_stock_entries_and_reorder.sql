@@ -3,62 +3,62 @@
 --     x safety factor = maximum level; reorder quantity = what is missing, counting goods already on the way).
 
 -- ---------- G1 ----------
-insert into public.permissions (key, module, description) values
+insert into inventory.permissions (key, module, description) values
   ('stock.entry', 'stock', 'Quick Stock In / Stock Out with a reason (for example sold in Zoho, sample, damaged)');
 
-create sequence public.stock_entry_seq;
-revoke all on sequence public.stock_entry_seq from public, anon, authenticated;
+create sequence inventory.stock_entry_seq;
+revoke all on sequence inventory.stock_entry_seq from public, anon, authenticated;
 
-create table public.stock_entries (
+create table inventory.stock_entries (
   id          uuid primary key default gen_random_uuid(),
-  entry_no    text not null unique default ('SE-' || lpad(nextval('public.stock_entry_seq')::text, 6, '0')),
-  location_id uuid not null references public.locations (id) on delete restrict,
+  entry_no    text not null unique default ('SE-' || lpad(nextval('inventory.stock_entry_seq')::text, 6, '0')),
+  location_id uuid not null references inventory.locations (id) on delete restrict,
   direction   text not null check (direction in ('IN', 'OUT')),
   reason      text not null,
   reference   text check (reference is null or char_length(reference) <= 60),
   remarks     text check (remarks is null or char_length(remarks) <= 500),
   created_at  timestamptz not null default now(),
-  created_by  uuid references public.profiles (id) default auth.uid(),
+  created_by  uuid references public.staff_profiles (id) default auth.uid(),
   constraint stock_entries_reason check (
     (direction = 'OUT' and reason in ('SOLD_OUTSIDE', 'SAMPLE', 'DAMAGED', 'OWN_USE', 'LOST', 'RETURN_TO_SUPPLIER', 'OTHER_OUT'))
     or (direction = 'IN' and reason in ('FOUND', 'CUSTOMER_RETURN', 'OTHER_IN')))
 );
-create index stock_entries_location_idx on public.stock_entries (location_id, created_at desc);
-alter table public.stock_entries enable row level security;
-create trigger stock_entries_audit after insert or update or delete on public.stock_entries
-  for each row execute function public.log_audit();
+create index stock_entries_location_idx on inventory.stock_entries (location_id, created_at desc);
+alter table inventory.stock_entries enable row level security;
+create trigger stock_entries_audit after insert or update or delete on inventory.stock_entries
+  for each row execute function inventory.log_audit();
 
-create table public.stock_entry_lines (
+create table inventory.stock_entry_lines (
   id       bigint generated always as identity primary key,
-  entry_id uuid not null references public.stock_entries (id) on delete restrict,
-  item_id  uuid not null references public.items (id) on delete restrict,
+  entry_id uuid not null references inventory.stock_entries (id) on delete restrict,
+  item_id  uuid not null references inventory.items (id) on delete restrict,
   quantity numeric(14,3) not null check (quantity > 0),
   constraint stock_entry_lines_one_per_item unique (entry_id, item_id)
 );
-alter table public.stock_entry_lines enable row level security;
+alter table inventory.stock_entry_lines enable row level security;
 
 -- An entry is final the moment it is saved: no edit, no delete. A mistake is fixed with an opposite entry.
-create or replace function public.stock_entries_immutable()
+create or replace function inventory.stock_entries_immutable()
 returns trigger language plpgsql set search_path = '' as $$
 begin
   raise exception 'Stock entries cannot be changed or deleted. Make an opposite entry to correct a mistake.' using errcode = '42501';
 end $$;
-revoke all on function public.stock_entries_immutable() from public, anon, authenticated;
-create trigger stock_entries_no_change before update or delete on public.stock_entries
-  for each row execute function public.stock_entries_immutable();
-create trigger stock_entry_lines_no_change before update or delete on public.stock_entry_lines
-  for each row execute function public.stock_entries_immutable();
+revoke all on function inventory.stock_entries_immutable() from public, anon, authenticated;
+create trigger stock_entries_no_change before update or delete on inventory.stock_entries
+  for each row execute function inventory.stock_entries_immutable();
+create trigger stock_entry_lines_no_change before update or delete on inventory.stock_entry_lines
+  for each row execute function inventory.stock_entries_immutable();
 
-create policy stock_entries_select on public.stock_entries for select to authenticated
-  using (((select public.has_permission('stock.entry')) or (select public.has_permission('stock.view')))
-         and (select public.can_access_location(location_id)));
-create policy stock_entry_lines_select on public.stock_entry_lines for select to authenticated
-  using (exists (select 1 from public.stock_entries e where e.id = stock_entry_lines.entry_id));
+create policy stock_entries_select on inventory.stock_entries for select to authenticated
+  using (((select inventory.has_permission('stock.entry')) or (select inventory.has_permission('stock.view')))
+         and (select inventory.can_access_location(location_id)));
+create policy stock_entry_lines_select on inventory.stock_entry_lines for select to authenticated
+  using (exists (select 1 from inventory.stock_entries e where e.id = stock_entry_lines.entry_id));
 
 -- p_header: {location_id, direction IN|OUT, reason, reference, remarks}
 -- p_lines : [{item_id, quantity}]
 -- One call, all or nothing. Line problems come back as a list (nothing is written).
-create or replace function public.create_stock_entry(p_header jsonb, p_lines jsonb)
+create or replace function inventory.create_stock_entry(p_header jsonb, p_lines jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   v_loc uuid := (p_header->>'location_id')::uuid;
@@ -70,13 +70,13 @@ declare
   v_id uuid; v_no text; v_n int; v_label text;
   x record; v_dec smallint; v_code text; v_have numeric;
 begin
-  if not public.has_permission('stock.entry') then
+  if not inventory.has_permission('stock.entry') then
     raise exception 'missing permission: stock.entry' using errcode = '42501';
   end if;
-  if not public.can_access_location(v_loc) then
+  if not inventory.can_access_location(v_loc) then
     raise exception 'you do not work in this location' using errcode = '42501';
   end if;
-  if not exists (select 1 from public.locations where id = v_loc and is_active and type <> 'TRANSIT') then
+  if not exists (select 1 from inventory.locations where id = v_loc and is_active and type <> 'TRANSIT') then
     raise exception 'location not found or archived';
   end if;
   if v_dir not in ('IN', 'OUT') then raise exception 'Choose Stock In or Stock Out'; end if;
@@ -103,7 +103,7 @@ begin
 
   for x in select * from jsonb_to_recordset(p_lines) as t(item_id uuid, quantity numeric) loop
     select i.internal_item_code, u.decimals into v_code, v_dec
-      from public.items i join public.units u on u.code = i.unit
+      from inventory.items i join inventory.units u on u.code = i.unit
      where i.id = x.item_id and i.is_active;
     if not found then
       v_errors := v_errors || jsonb_build_object('item_id', x.item_id, 'message', 'Item not found or archived');
@@ -114,7 +114,7 @@ begin
         'message', case when v_dec = 0 then 'This item is counted in whole numbers' else 'At most ' || v_dec || ' decimals for this unit' end);
     elsif v_dir = 'OUT' then
       v_have := 0; -- no balance row means nothing in stock (SELECT INTO keeps the old value when no row)
-      select coalesce(quantity, 0) into v_have from public.stock_balances where item_id = x.item_id and location_id = v_loc for update;
+      select coalesce(quantity, 0) into v_have from inventory.stock_balances where item_id = x.item_id and location_id = v_loc for update;
       if coalesce(v_have, 0) < x.quantity then
         v_errors := v_errors || jsonb_build_object('item_id', x.item_id, 'code', v_code, 'message', 'Only ' || coalesce(v_have, 0) || ' in stock here');
       end if;
@@ -128,33 +128,33 @@ begin
     return jsonb_build_object('ok', false, 'errors', v_errors);
   end if;
 
-  insert into public.stock_entries (location_id, direction, reason, reference, remarks)
+  insert into inventory.stock_entries (location_id, direction, reason, reference, remarks)
   values (v_loc, v_dir, v_reason, v_ref, v_rem) returning id, entry_no into v_id, v_no;
-  insert into public.stock_entry_lines (entry_id, item_id, quantity)
+  insert into inventory.stock_entry_lines (entry_id, item_id, quantity)
   select v_id, t.item_id, t.quantity from jsonb_to_recordset(p_lines) as t(item_id uuid, quantity numeric);
 
-  insert into public.stock_movements (item_id, from_location_id, to_location_id, quantity, movement_type, reason, reference)
+  insert into inventory.stock_movements (item_id, from_location_id, to_location_id, quantity, movement_type, reason, reference)
   select t.item_id,
          case when v_dir = 'OUT' then v_loc end,
          case when v_dir = 'IN' then v_loc end,
          t.quantity,
-         (case when v_dir = 'OUT' then 'STOCK_OUT' else 'STOCK_IN' end)::public.stock_movement_type,
+         (case when v_dir = 'OUT' then 'STOCK_OUT' else 'STOCK_IN' end)::inventory.stock_movement_type,
          v_label || coalesce(': ' || v_rem, ''),
          v_no
     from jsonb_to_recordset(p_lines) as t(item_id uuid, quantity numeric);
 
-  insert into public.audit_log (actor, action, entity, entity_id, details)
+  insert into inventory.audit_log (actor, action, entity, entity_id, details)
   values ((select auth.uid()), 'STOCK_ENTRY', 'stock_entries', v_id::text,
           jsonb_build_object('entry_no', v_no, 'direction', v_dir, 'reason', v_reason, 'lines', v_n, 'location_id', v_loc));
   return jsonb_build_object('ok', true, 'id', v_id, 'entry_no', v_no, 'errors', '[]'::jsonb);
 end $$;
 
-revoke all on function public.create_stock_entry(jsonb, jsonb) from public, anon;
-grant execute on function public.create_stock_entry(jsonb, jsonb) to authenticated;
+revoke all on function inventory.create_stock_entry(jsonb, jsonb) from public, anon;
+grant execute on function inventory.create_stock_entry(jsonb, jsonb) to authenticated;
 
 -- ---------- G2 ----------
 -- Planning numbers on the item (same meaning as the shop sheet's Item List).
-alter table public.items
+alter table inventory.items
   add column lead_time_days integer check (lead_time_days is null or lead_time_days between 0 and 3650),
   add column safety_factor numeric(5,2) check (safety_factor is null or (safety_factor >= 1 and safety_factor <= 10)),
   add column moq numeric(14,3) check (moq is null or moq > 0);
@@ -166,7 +166,7 @@ alter table public.items
 --               time; otherwise the manual maximum level of that place, if one is set.
 -- suggested   = target - (in stock + still due on open purchase orders + transfers on the way here),
 --               rounded up to the unit's decimals and to a multiple of the MOQ; never below 0.
-create or replace function public.reorder_suggestions(p_location uuid default null, p_days integer default 30)
+create or replace function inventory.reorder_suggestions(p_location uuid default null, p_days integer default 30)
 returns table (
   item_id uuid, internal_item_code text, item_name text, unit text,
   location_id uuid, location_code text,
@@ -177,7 +177,7 @@ returns table (
 )
 language plpgsql stable security invoker set search_path = '' as $$
 begin
-  if not (public.has_permission('stock.view') and public.has_permission('items.view')) then
+  if not (inventory.has_permission('stock.view') and inventory.has_permission('items.view')) then
     raise exception 'Reorder suggestions need the stock.view and items.view permissions' using errcode = 'P0001';
   end if;
   if p_days is null or p_days < 7 or p_days > 365 then
@@ -186,25 +186,25 @@ begin
   return query
   with flow as (
     select m.item_id as fi, m.from_location_id as fl, sum(m.quantity) as q
-      from public.stock_movements m
+      from inventory.stock_movements m
      where m.from_location_id is not null
        and m.movement_type in ('SALE', 'STOCK_OUT', 'TRANSFER')
        and m.created_at >= now() - make_interval(days => p_days)
      group by 1, 2
   ), back as (
     select m.item_id as bi, m.to_location_id as bl, sum(m.quantity) as q
-      from public.stock_movements m
+      from inventory.stock_movements m
      where m.to_location_id is not null and m.movement_type = 'SALE_RETURN'
        and m.created_at >= now() - make_interval(days => p_days)
      group by 1, 2
   ), po as (
     select pl.item_id as pi, o.location_id as plo, sum(pl.quantity - pl.received_qty) as q
-      from public.purchase_order_lines pl join public.purchase_orders o on o.id = pl.po_id
+      from inventory.purchase_order_lines pl join inventory.purchase_orders o on o.id = pl.po_id
      where o.status in ('SENT', 'PARTIAL')
      group by 1, 2
   ), tr as (
     select tl.item_id as ti, t.to_location_id as tlo, sum(tl.quantity_sent) as q
-      from public.stock_transfer_lines tl join public.stock_transfers t on t.id = tl.transfer_id
+      from inventory.stock_transfer_lines tl join inventory.stock_transfers t on t.id = tl.transfer_id
      where t.status = 'SENT'
      group by 1, 2
   ), base as (
@@ -213,10 +213,10 @@ begin
            i.lead_time_days as b_lead, i.safety_factor as b_safety, i.moq as b_moq, u.decimals as b_dec,
            coalesce(po.q, 0) as b_po, coalesce(tr.q, 0) as b_tr,
            greatest(coalesce(flow.q, 0) - coalesce(back.q, 0), 0) as b_consumed
-      from public.stock_overview so
-      join public.locations l on l.id = so.location_id
-      join public.items i on i.id = so.item_id
-      join public.units u on u.code = i.unit
+      from inventory.stock_overview so
+      join inventory.locations l on l.id = so.location_id
+      join inventory.items i on i.id = so.item_id
+      join inventory.units u on u.code = i.unit
       left join flow on flow.fi = so.item_id and flow.fl = so.location_id
       left join back on back.bi = so.item_id and back.bl = so.location_id
       left join po on po.pi = so.item_id and po.plo = so.location_id
@@ -248,5 +248,5 @@ begin
    limit 5000;
 end $$;
 
-revoke all on function public.reorder_suggestions(uuid, integer) from public, anon;
-grant execute on function public.reorder_suggestions(uuid, integer) to authenticated;
+revoke all on function inventory.reorder_suggestions(uuid, integer) from public, anon;
+grant execute on function inventory.reorder_suggestions(uuid, integer) to authenticated;

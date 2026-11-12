@@ -7,8 +7,9 @@ declare
   bucket_ok boolean; limit_bytes bigint; mimes text[]; is_public boolean;
 begin
   insert into auth.users (id, email) values (ed,'ed@test.local'),(vw,'vw@test.local'),(no,'no@test.local');
-  update public.profiles set is_active = true where id in (ed, vw, no);
-  insert into public.user_permissions (user_id, permission_key) values
+  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (ed, vw, no) on conflict do nothing;
+  update inventory.user_access set is_active = true where user_id in (ed, vw, no);
+  insert into inventory.user_permissions (user_id, permission_key) values
     (ed,'items.view'),(ed,'items.edit'),(vw,'items.view');
 
   select public, file_size_limit, allowed_mime_types into is_public, limit_bytes, mimes

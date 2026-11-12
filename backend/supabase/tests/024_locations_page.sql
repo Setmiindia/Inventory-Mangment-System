@@ -4,35 +4,46 @@
 do $$
 declare v_admin uuid; v_r jsonb; v_out text := ''; v_loc uuid; v_other uuid;
 begin
-  select id into v_admin from public.profiles where is_admin and is_active limit 1;
+  -- test prerequisites (all rolled back): a throw-away admin and a little demo data (the live database may be empty)
+  v_admin := gen_random_uuid();
+  insert into auth.users (id, email) values (v_admin, 'adm@test.local');
+  insert into public.staff_profiles (id, full_name) values (v_admin, 'adm@test.local') on conflict do nothing;
+  update inventory.user_access set is_active = true, is_admin = true where user_id = v_admin;
+  insert into inventory.categories (name) values ('DEMO CATEGORY');
+  insert into inventory.locations (code, name, type) values ('DEMO-WH', 'Demo warehouse', 'WAREHOUSE'), ('DEMO-SHOP1', 'Demo shop', 'SHOP');
+  insert into inventory.items (internal_item_code, item_name, selling_item_name, purchase_source, category_id)
+    values ('DEMO-3RCA-1.5M', '3 core cable', '3 core cable', 'LOCAL', (select id from inventory.categories where name = 'DEMO CATEGORY'));
+  insert into inventory.stock_movements (item_id, to_location_id, quantity, movement_type)
+    select i.id, l.id, 50, 'OPENING' from inventory.items i, inventory.locations l where i.internal_item_code = 'DEMO-3RCA-1.5M' and l.code = 'DEMO-WH';
+  select id into v_admin from inventory.people where is_admin and is_active limit 1;
   perform set_config('request.jwt.claims', json_build_object('sub', v_admin, 'role', 'authenticated')::text, true);
   set local role authenticated;
 
-  v_r := public.locations_page(null, null, null, null, 10, 0);
+  v_r := inventory.locations_page(null, null, null, null, 10, 0);
   v_out := v_out || case when (v_r->>'total')::int >= 1 and v_r->'kpi' ?& array['total','warehouses','shops','active','capacity','products','avg_utilization','new_month'] then E'\nPASS rows and numbers' else E'\nFAIL rows or numbers' end;
   v_out := v_out || case when not exists (select 1 from jsonb_array_elements(v_r->'rows') e where e->>'type' = 'TRANSIT') then E'\nPASS in-transit place is left out' else E'\nFAIL transit shown' end;
 
-  insert into public.locations (code, name, type, city, capacity, contact_person, phone) values ('TST-WH', 'TEST WAREHOUSE', 'WAREHOUSE', 'Testville', 10, 'Tester', '123') returning id into v_loc;
-  v_r := public.locations_page('testville', 'WAREHOUSE', 'active', 'Testville', 10, 0);
+  insert into inventory.locations (code, name, type, city, capacity, contact_person, phone) values ('TST-WH', 'TEST WAREHOUSE', 'WAREHOUSE', 'Testville', 10, 'Tester', '123') returning id into v_loc;
+  v_r := inventory.locations_page('testville', 'WAREHOUSE', 'active', 'Testville', 10, 0);
   v_out := v_out || case when (v_r->>'total')::int = 1 and (v_r->'rows'->0->>'utilization')::int = 0 then E'\nPASS filters, capacity and 0% use' else E'\nFAIL filters ' || v_r::text end;
-  begin insert into public.locations (code, name, type, capacity) values ('TST-2', 'TEST TWO', 'SHOP', -5); v_out := v_out || E'\nFAIL negative capacity accepted';
+  begin insert into inventory.locations (code, name, type, capacity) values ('TST-2', 'TEST TWO', 'SHOP', -5); v_out := v_out || E'\nFAIL negative capacity accepted';
   exception when check_violation then v_out := v_out || E'\nPASS negative capacity refused'; end;
-  v_r := public.locations_page('%', null, null, null, 10, 0);
+  v_r := inventory.locations_page('%', null, null, null, 10, 0);
   v_out := v_out || case when (v_r->>'total')::int = 0 then E'\nPASS percent sign is text' else E'\nFAIL percent matched' end;
-  begin perform public.locations_page(null, 'TRANSIT', null, null, 10, 0); v_out := v_out || E'\nFAIL transit type accepted';
+  begin perform inventory.locations_page(null, 'TRANSIT', null, null, 10, 0); v_out := v_out || E'\nFAIL transit type accepted';
   exception when others then v_out := v_out || E'\nPASS transit type refused'; end;
-  begin perform public.locations_page(null, null, 'bogus', null, 10, 0); v_out := v_out || E'\nFAIL bad status';
+  begin perform inventory.locations_page(null, null, 'bogus', null, 10, 0); v_out := v_out || E'\nFAIL bad status';
   exception when others then v_out := v_out || E'\nPASS bad status refused'; end;
   reset role;
 
   -- a signed-in account with no places sees none
   perform set_config('request.jwt.claims', json_build_object('sub', gen_random_uuid(), 'role', 'authenticated')::text, true);
   set local role authenticated;
-  v_r := public.locations_page(null, null, null, null, 10, 0);
+  v_r := inventory.locations_page(null, null, null, null, 10, 0);
   v_out := v_out || case when (v_r->>'total')::int = 0 then E'\nPASS stranger sees no places' else E'\nFAIL stranger sees places' end;
   reset role;
   set local role anon;
-  begin perform public.locations_page(null, null, null, null, 10, 0); v_out := v_out || E'\nFAIL anon';
+  begin perform inventory.locations_page(null, null, null, null, 10, 0); v_out := v_out || E'\nFAIL anon';
   exception when insufficient_privilege then v_out := v_out || E'\nPASS anon denied'; end;
   reset role;
   raise exception 'TEST 024 RESULT:%', v_out;

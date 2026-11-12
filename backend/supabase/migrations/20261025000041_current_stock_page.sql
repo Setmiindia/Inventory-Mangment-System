@@ -5,7 +5,7 @@
 -- Average cost = weighted average of the buying prices of POSTED goods receipts that this person may see (receipts.cost needed);
 -- stock value = quantity x average cost. Without receipts.cost both are null. Stock itself never changes here.
 -- Runs as the caller (SECURITY INVOKER): row-level security decides which places, products and prices are visible.
-create or replace function public.current_stock_page(
+create or replace function inventory.current_stock_page(
   p_q text default null,
   p_category uuid default null,
   p_location uuid default null,
@@ -23,10 +23,10 @@ declare
   v_like text;
   v_limit int := least(greatest(coalesce(p_limit, 10), 1), 100);
   v_offset int := greatest(coalesce(p_offset, 0), 0);
-  v_cost boolean := public.has_permission('receipts.cost');
+  v_cost boolean := inventory.has_permission('receipts.cost');
   v_result jsonb;
 begin
-  if not public.has_permission('stock.view') then
+  if not inventory.has_permission('stock.view') then
     raise exception 'You do not have permission to see stock' using errcode = '42501';
   end if;
   if p_status is not null and p_status not in ('', 'all', 'IN', 'LOW', 'OUT', 'OVER') then
@@ -36,9 +36,9 @@ begin
 
   with avgc as (
     select gl.item_id, sum(gl.quantity * gc.unit_cost) / nullif(sum(gl.quantity), 0) as avg_cost
-      from public.goods_receipt_lines gl
-      join public.goods_receipts r on r.id = gl.receipt_id and r.status = 'POSTED'
-      join public.goods_receipt_costs gc on gc.line_id = gl.id
+      from inventory.goods_receipt_lines gl
+      join inventory.goods_receipts r on r.id = gl.receipt_id and r.status = 'POSTED'
+      join inventory.goods_receipt_costs gc on gc.line_id = gl.id
      where v_cost
      group by gl.item_id
   ),
@@ -47,7 +47,7 @@ begin
            c.id as category_id, c.name as category_name,
            l.id as location_id, l.name as place_name,
            coalesce(b.quantity, 0) as qty, rl.min_qty, rl.max_qty,
-           (select sb.code from public.item_bins ib join public.storage_bins sb on sb.id = ib.bin_id
+           (select sb.code from inventory.item_bins ib join inventory.storage_bins sb on sb.id = ib.bin_id
              where ib.item_id = i.id and ib.location_id = l.id order by sb.code limit 1) as rack,
            a.avg_cost,
            case when a.avg_cost is not null then coalesce(b.quantity, 0) * a.avg_cost end as value,
@@ -55,11 +55,11 @@ begin
                 when rl.min_qty is not null and rl.min_qty > 0 and coalesce(b.quantity, 0) < rl.min_qty then 'LOW'
                 when rl.max_qty is not null and coalesce(b.quantity, 0) > rl.max_qty then 'OVER'
                 else 'IN' end as status
-      from public.items i
-      join public.locations l on l.is_active and l.type <> 'TRANSIT'
-      left join public.categories c on c.id = i.category_id
-      left join public.stock_balances b on b.item_id = i.id and b.location_id = l.id
-      left join public.reorder_levels rl on rl.item_id = i.id and rl.location_id = l.id
+      from inventory.items i
+      join inventory.locations l on l.is_active and l.type <> 'TRANSIT'
+      left join inventory.categories c on c.id = i.category_id
+      left join inventory.stock_balances b on b.item_id = i.id and b.location_id = l.id
+      left join inventory.reorder_levels rl on rl.item_id = i.id and rl.location_id = l.id
       left join avgc a on a.item_id = i.id
      where i.is_active and (b.item_id is not null or rl.item_id is not null)
   ),
@@ -69,14 +69,14 @@ begin
        and (p_location is null or x.location_id = p_location)
        and (coalesce(p_status, '') in ('', 'all') or x.status = p_status)
        and (coalesce(p_q, '') = '' or x.code ilike v_like or x.item_name ilike v_like or x.category_name ilike v_like or x.place_name ilike v_like or x.rack ilike v_like
-            or exists (select 1 from public.item_barcodes bc where bc.item_id = x.item_id and bc.barcode ilike v_like))
+            or exists (select 1 from inventory.item_barcodes bc where bc.item_id = x.item_id and bc.barcode ilike v_like))
   )
   select jsonb_build_object(
     'total', (select count(*) from filtered),
     'rows', (select coalesce(jsonb_agg(to_jsonb(t) order by t.code, t.place_name), '[]'::jsonb)
                from (select * from filtered order by code, place_name limit v_limit offset v_offset) t),
-    'categories', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.categories),
-    'places', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from public.locations where is_active and type <> 'TRANSIT'),
+    'categories', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.categories),
+    'places', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name) order by name), '[]'::jsonb) from inventory.locations where is_active and type <> 'TRANSIT'),
     'kpi', jsonb_build_object(
       'items', (select count(distinct item_id) from base),
       'qty', (select coalesce(sum(qty), 0) from base),
@@ -88,5 +88,5 @@ begin
   return v_result;
 end $$;
 
-revoke execute on function public.current_stock_page(text, uuid, uuid, text, int, int) from public, anon;
-grant execute on function public.current_stock_page(text, uuid, uuid, text, int, int) to authenticated;
+revoke execute on function inventory.current_stock_page(text, uuid, uuid, text, int, int) from public, anon;
+grant execute on function inventory.current_stock_page(text, uuid, uuid, text, int, int) to authenticated;
