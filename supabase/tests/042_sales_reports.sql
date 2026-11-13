@@ -5,7 +5,7 @@ declare
   wh uuid; sup uuid; c1 uuid; c2 uuid; cat1 uuid; cat2 uuid; ia uuid; ib uuid; cr uuid; r jsonb; res text := ''; pg jsonb; o1 uuid; o2 uuid; o3 uuid; j uuid; rt uuid;
 begin
   insert into auth.users (id, email) values (adm,'a@s.l'),(sv,'v@s.l'),(nobody,'n@s.l');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (adm, sv, nobody) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (adm, sv, nobody);
   update inventory.user_access set is_active = true where user_id in (adm, sv, nobody);
   update inventory.user_access set is_admin = true where user_id = adm;
   insert into inventory.user_permissions (user_id, permission_key) values (sv, 'sales_orders.view'), (sv, 'items.view'), (sv, 'returns.view');

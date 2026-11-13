@@ -5,7 +5,7 @@ declare
   wh uuid; sh uuid; pc uuid; res text := ''; n int; low boolean; qty numeric;
 begin
   insert into auth.users (id, email) values (a,'a@t.l'),(b,'b@t.l'),(c,'c@t.l');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (a,b,c) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (a,b,c);
   update inventory.user_access set is_active = true where user_id in (a,b,c);
   insert into inventory.user_permissions (user_id, permission_key) values (a,'items.view'),(a,'stock.view'),(b,'items.view'),(c,'items.view'),(c,'stock.view');
   insert into inventory.locations (code, name, type) values ('WH','W','WAREHOUSE') returning id into wh;

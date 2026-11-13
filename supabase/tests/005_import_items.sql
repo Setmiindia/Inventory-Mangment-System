@@ -6,7 +6,7 @@ declare
   res text := ''; r jsonb; n0 int; n int; rows jsonb; cat1 uuid; errrows int[]; catid uuid; sell text; bcn int; gen int;
 begin
   insert into auth.users (id, email) values (a,'a@t.local'),(b,'b@t.local'),(c,'c@t.local');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (a,b,c) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (a,b,c);
   update inventory.user_access set is_active = true where user_id in (a,b,c);
   insert into inventory.user_permissions (user_id, permission_key) values
     (a,'items.view'),(a,'items.import'),(a,'categories.manage'),

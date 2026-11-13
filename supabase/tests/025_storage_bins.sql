@@ -5,7 +5,6 @@ begin
   -- test prerequisites (all rolled back): a throw-away admin and a little demo data (the live database may be empty)
   v_admin := gen_random_uuid();
   insert into auth.users (id, email) values (v_admin, 'adm@test.local');
-  insert into public.staff_profiles (id, full_name) values (v_admin, 'adm@test.local') on conflict do nothing;
   update inventory.user_access set is_active = true, is_admin = true where user_id = v_admin;
   insert into inventory.categories (name) values ('DEMO CATEGORY');
   insert into inventory.locations (code, name, type) values ('DEMO-WH', 'Demo warehouse', 'WAREHOUSE'), ('DEMO-SHOP1', 'Demo shop', 'SHOP');

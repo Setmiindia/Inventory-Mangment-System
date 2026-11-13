@@ -5,7 +5,7 @@ declare
   wh uuid; role_a uuid; role_b uuid; admin_role uuid; dept uuid; inv uuid; res text := ''; pg jsonb; r uuid;
 begin
   insert into auth.users (id, email) values (adm,'adm@u.l'),(staff,'staff@u.l'),(other,'other@u.l');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (adm, staff, other) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (adm, staff, other);
   update inventory.user_access set is_active = true where user_id in (adm, staff, other);
   update inventory.user_access set is_admin = true where user_id = adm;
   insert into inventory.locations (code, name, type) values ('WHU', 'Warehouse UR', 'WAREHOUSE') returning id into wh;
@@ -88,13 +88,11 @@ begin
 
   -- first sign-in of the invited person (what the Supabase login does)
   insert into auth.users (id, email) values (newu, 'New.Person@U.L');
-  insert into public.staff_profiles (id, full_name) values (newu, 'Newbie');
   res := res || 'U28 first sign-in: the person is active with role, department, permission and place: ' || case when (select is_active from inventory.people where id = newu) and (select role_id from inventory.user_access where user_id = newu) = role_a
     and (select department_id from inventory.user_access where user_id = newu) = dept and exists (select 1 from inventory.user_permissions where user_id = newu and permission_key = 'items.view')
     and exists (select 1 from inventory.user_locations where user_id = newu and location_id = wh) and (select full_name from inventory.people where id = newu) = 'Newbie' and not (select is_admin from inventory.user_access where user_id = newu) then 'PASS' else 'FAIL' end || E'\n';
   res := res || 'U29 the invite is marked as used: ' || case when (select used_at from inventory.user_invites where id = inv) is not null then 'PASS' else 'FAIL' end || E'\n';
   insert into auth.users (id, email) values (gen_random_uuid(), 'stranger@u.l');
-  insert into public.staff_profiles (id, full_name) select id, 'Stranger' from auth.users where email = 'stranger@u.l';
   res := res || 'U30 a sign-in that was NOT invited stays inactive with nothing: ' || case when (select not is_active from inventory.people where email = 'stranger@u.l') and not exists (select 1 from inventory.user_permissions up join inventory.people p on p.id = up.user_id where p.email = 'stranger@u.l') then 'PASS' else 'FAIL' end || E'\n';
 
   perform set_config('request.jwt.claims', json_build_object('sub',adm,'role','authenticated')::text, true);

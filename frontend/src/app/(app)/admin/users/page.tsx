@@ -334,7 +334,7 @@ async function UserPanel({ selId, rows, panelTab, keep, meId, roles, departments
           <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2"><dt className="text-muted">Permissions</dt><dd>{n(row.perm_count)} (from the role)</dd></div>
           <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-2"><dt className="text-muted">Invited on</dt><dd>{dateTime(row.created_at)}</dd></div>
         </dl>
-        <div className="rounded-lg border border-line bg-surface-muted p-3 text-xs text-muted">Waiting for the first sign-in. Make the login with this email in the Supabase dashboard (Authentication, Users). The role, department and places are set at that moment.</div>
+        <div className="rounded-lg border border-line bg-surface-muted p-3 text-xs text-muted">No email has been sent yet. To send it: Supabase dashboard, Authentication, Users, Add user, Send invitation, with this email. The person then sets a password and signs in. The role, department and places are set at that moment.</div>
         <CancelInvite inviteId={row.id} />
       </div>
     );

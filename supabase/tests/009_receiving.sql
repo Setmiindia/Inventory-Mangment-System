@@ -8,7 +8,7 @@ declare
   res text := ''; r jsonb; rid uuid; rid2 uuid; rno text; n int; q numeric; c numeric; st text; cnt int;
 begin
   insert into auth.users (id, email) values (a,'a@t.l'),(b,'b@t.l'),(v,'v@t.l'),(s,'s@t.l'),(m,'m@t.l');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (a,b,v,s,m) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (a,b,v,s,m);
   update inventory.user_access set is_active = true where user_id in (a,b,v,s,m);
   insert into inventory.user_permissions (user_id, permission_key) values
     (a,'receipts.create'),(a,'receipts.post'),(a,'receipts.cost'),(a,'receipts.view'),(a,'stock.view'),

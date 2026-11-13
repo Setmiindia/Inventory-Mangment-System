@@ -10,7 +10,7 @@ declare
   hdr jsonb;
 begin
   insert into auth.users (id, email) values (adm,'a@t.l'),(b,'b@t.l'),(bn,'bn@t.l'),(rcv,'r@t.l'),(vw,'v@t.l'),(o,'o@t.l'),(nn,'n@t.l');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (adm,b,bn,rcv,vw,o,nn) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (adm,b,bn,rcv,vw,o,nn);
   update inventory.user_access set is_active = true where user_id in (adm,b,bn,rcv,vw,o,nn);
   update inventory.user_access set is_admin = true where user_id = adm;
   insert into inventory.user_permissions (user_id, permission_key) values

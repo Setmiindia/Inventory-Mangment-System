@@ -5,10 +5,10 @@ declare
   wh uuid; sup uuid; i1 uuid; i2 uuid; r jsonb; res text := ''; pg jsonb; g1 uuid; g2 uuid; gd uuid; q1 uuid; q2 uuid; n int; l1 bigint; l2 bigint; stock_before numeric; stock_after numeric;
 begin
   insert into auth.users (id, email) values (adm,'a@t.l'),(viewer,'v@t.l'),(nobody,'n@t.l');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (adm, viewer, nobody) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (adm, viewer, nobody);
   update inventory.user_access set is_active = true where user_id in (adm, viewer, nobody);
   update inventory.user_access set is_admin = true where user_id = adm;
-  update public.staff_profiles set full_name = 'Test Inspector' where id = adm;
+  update core.profiles set full_name = 'Test Inspector' where id = adm;
   insert into inventory.user_permissions (user_id, permission_key) values (viewer, 'qc.view'), (viewer, 'receipts.view');
   insert into inventory.locations (code, name, type) values ('WHQ', 'Warehouse Q', 'WAREHOUSE') returning id into wh;
   insert into inventory.user_locations values (viewer, wh);

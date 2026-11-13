@@ -12,12 +12,18 @@ export type CurrentUser = {
   permissions: string[];
 };
 
-// Who is signed in? Asks the Supabase Auth server (getUser), not just the cookie,
-// so a revoked or forged session is rejected. Cached per request.
+// Who is signed in? The session token is checked HERE, on this server, against the project's public signing key (getClaims:
+// a forged or expired token is rejected). This replaced getUser, which asked the Auth server in Tokyo on every page (about 0.2 to
+// 0.6 second each time). It is as safe for what matters: the database trusts the very same token (auth.uid() in every policy), and
+// "is this person still switched on?" is read from the database on every request just below, so switching someone off works at once.
+// The one difference: a session that was signed out elsewhere keeps working until its token expires (at most one hour).
+// Cached per request.
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = await createClient();
-  const { data: auth, error: authError } = await supabase.auth.getUser();
-  if (authError || !auth?.user) return null;
+  const { data: claimsData, error: authError } = await supabase.auth.getClaims();
+  const claims = claimsData?.claims;
+  if (authError || !claims?.sub) return null;
+  const auth = { user: { id: claims.sub, email: typeof claims.email === "string" ? claims.email : "" } };
 
   // The two reads do not depend on each other: ask together (one network wait instead of two).
   const [{ data: profile, error: profileError }, { data: perms }] = await Promise.all([

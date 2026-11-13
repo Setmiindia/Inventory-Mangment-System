@@ -147,9 +147,9 @@ export function AddUserForm({ roles, departments, locationOptions }: { roles: Op
       <div className="rounded-lg border border-line bg-surface-muted p-3 text-xs text-muted">
         <p className="font-semibold text-[var(--foreground)]">How it works</p>
         <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-          <li>Save here. The person shows in the list as Invited.</li>
-          <li>In the Supabase dashboard (Authentication, Users) make the login with the same email.</li>
-          <li>At the first sign-in the role&apos;s permissions, department and places are set and the person is switched on.</li>
+          <li>Save here. The person shows in the list as Invited. <strong className="text-[var(--foreground)]">No email is sent from this screen.</strong></li>
+          <li>Supabase dashboard, Authentication, Users, <strong className="text-[var(--foreground)]">Add user, Send invitation</strong>, with the same email. Supabase sends the email.</li>
+          <li>The person opens the email, sets a password and signs in. The role&apos;s permissions, department and places are set at once.</li>
         </ol>
       </div>
       {msg(state)}

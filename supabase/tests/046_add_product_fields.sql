@@ -3,7 +3,7 @@ do $$
 declare adm uuid := gen_random_uuid(); res text := ''; it_on uuid; it_off uuid; loc uuid; cu uuid; su uuid; r jsonb; v_low boolean; n int;
 begin
   insert into auth.users (id, email) values (adm,'adm@c.l');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id = adm on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id = adm;
   update inventory.user_access set is_active = true, is_admin = true where user_id = adm;
   select id into loc from inventory.locations where is_active and type <> 'TRANSIT' limit 1;
   if loc is null then insert into inventory.locations (code, name, type) values ('TSTP', 'Test place P', 'WAREHOUSE') returning id into loc; end if;  -- the database may hold no place yet

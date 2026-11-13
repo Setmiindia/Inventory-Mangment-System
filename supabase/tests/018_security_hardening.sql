@@ -7,7 +7,6 @@ begin
   if not exists (select 1 from inventory.people where is_admin and is_active) then
     v_admin := gen_random_uuid();
     insert into auth.users (id, email) values (v_admin, 'adm@test.local');
-    insert into public.staff_profiles (id, full_name) values (v_admin, 'adm@test.local') on conflict do nothing;
     update inventory.user_access set is_active = true, is_admin = true where user_id = v_admin;
   end if;
   select id into v_admin from inventory.people where is_admin and is_active limit 1;

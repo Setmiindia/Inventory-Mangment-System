@@ -12,9 +12,9 @@ begin
   insert into auth.users (id, email) values
     (u1,'t1@test.local'),(u2,'t2@test.local'),(u3,'t3@test.local'),(u4,'t4@test.local');
   res := res || 'T0 inventory access rows active: ' || (select count(*) from inventory.user_access where is_active) || ' of ' || (select count(*) from inventory.user_access) || ' (info only; new staff start inactive) ' || E'\n';
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id = u1 on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id = u1;
   update inventory.user_access set is_active = true, is_admin = true where user_id = u1;          -- u1 admin
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (u2, u3, u4) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (u2, u3, u4);
   update inventory.user_access set is_active = true where user_id in (u2, u3);                    -- u2 none, u3 some
   insert into inventory.user_permissions (user_id, permission_key) values
     (u3,'items.view'),(u3,'items.create'),(u3,'items.edit');

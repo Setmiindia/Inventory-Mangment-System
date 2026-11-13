@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 import Link from "next/link";
 import { can, requireUser, showDashboard } from "@/lib/auth";
 import { getLang, tr } from "@/lib/i18n";
@@ -17,17 +17,56 @@ import { MapPin } from "lucide-react";
 
 
 
-// Every page in this group needs a signed-in user. Reading the session is a request-time
-// read, so with Cache Components it must sit inside <Suspense>.
+// SPEED: the page used to be rendered INSIDE this layout's async function, so it could only start after the layout had finished
+// all its database reads (user, profile, places, billing switch, low-stock count, menu step). Now the top bar, the menu and the
+// bottom bar are separate pieces that read the shared, cached `getShell()` at the same time as the page itself, so the page
+// no longer waits for them. Every page in this group still needs a signed-in, active user: <Guard> checks it (one cached call,
+// the same one the page makes).
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <Suspense fallback={<p className="p-6 text-sm text-muted">Loading...</p>}>
-      <Shell>{children}</Shell>
-    </Suspense>
+    <div className="min-h-screen">
+      <Suspense fallback={<header className="sticky top-0 z-30 h-16 border-b border-line bg-surface print:hidden" />}>
+        <TopBar />
+      </Suspense>
+      <div className="lg:flex">
+        <Suspense fallback={null}>
+          <Side />
+        </Suspense>
+        <div className="min-w-0 flex-1">
+          <div className="mx-auto max-w-[1400px] px-4 py-6 pb-24 lg:pb-8 print:p-0">
+            <Suspense fallback={<p className="p-6 text-sm text-muted">Loading...</p>}>
+              <Guard>{children}</Guard>
+            </Suspense>
+          </div>
+        </div>
+      </div>
+      <Suspense fallback={null}>
+        <Bottom />
+      </Suspense>
+    </div>
   );
 }
 
-async function Shell({ children }: { children: React.ReactNode }) {
+// Central guard: an inactive account never reaches any page content.
+async function Guard({ children }: { children: React.ReactNode }) {
+  const user = await requireUser();
+  if (!user.isActive) {
+    const lang = await getLang();
+    return (
+      <p role="status" className="rounded-xl border border-amber-400 bg-amber-50 p-4 text-amber-900">
+        {tr(lang, "top_inactive")}
+      </p>
+    );
+  }
+  return children;
+}
+
+async function TopBar() { return (await getShell()).header; }
+async function Side() { const s = await getShell(); return <SidebarColumn><NavLinks items={s.nav} /></SidebarColumn>; }
+async function Bottom() { return <BottomBar items={(await getShell()).bottomItems} />; }
+
+// Everything the menu and the top bar need, worked out once per request (React cache) and shared by the three pieces above.
+const getShell = cache(async () => {
   const user = await requireUser();
   // The bell: how many items are low on stock (the database only shows the places this person may see).
   const countLow = async () => {
@@ -122,60 +161,43 @@ async function Shell({ children }: { children: React.ReactNode }) {
       </span>
     ) : null;
 
-  return (
-    <div className="min-h-screen">
+  return {
+    header: (
       <header className="sticky top-0 z-30 h-16 border-b border-line bg-surface print:hidden">
-        <div className="flex h-full items-center gap-2 px-3 sm:gap-3 sm:px-4">
-          <MobileMenu items={[...nav, ...extras]} openLabel={tr(lang, "top_menu_open")} closeLabel={tr(lang, "top_menu_close")} />
-          <Link href={showDashboard(user) ? "/dashboard" : "/"} className="flex shrink-0 items-center gap-2.5" aria-label="SETMI INDIA, home">
-            <Image src="/brand/setmi-round-192.png" alt="" width={44} height={44} priority className="h-11 w-11" />
-            <span className="hidden leading-tight sm:block">
-              <span className="block text-xl font-extrabold tracking-tight">
-                <span className="bg-gradient-to-r from-[#0b7fb0] to-[#12b5c9] bg-clip-text text-transparent">SETMI</span>{" "}
-                <span className="text-[#16a34a]">INDIA</span>
-              </span>
-              <span className="block text-[11px] font-medium text-muted">Engineered for the Extraordinary.</span>
-            </span>
-          </Link>
-          <CollapseButton label={tr(lang, "top_collapse")} />
-          <div className="flex min-w-0 flex-1 justify-center px-1 md:px-4">
-            <CommandPalette entries={paletteEntries} canSearchItems={can(user, "items.view")} labels={paletteLabels} />
-          </div>
-          <ThemeToggle lightLabel={tr(lang, "theme_to_light")} darkLabel={tr(lang, "theme_to_dark")} />
-          <NotificationBell count={lowCount} label={tr(lang, "top_notifications")} text={lowCount > 0 ? `${lowCount} ${tr(lang, "top_low_alert")}` : tr(lang, "top_no_alert")} />
-          <HelpButton label={tr(lang, "top_help")} />
-          <UserMenu
-            name={displayName}
-            email={user.email}
-            role={user.isAdmin ? tr(lang, "top_role_admin") : tr(lang, "top_role_staff")}
-            signOut={tr(lang, "top_signout")}
-          >
-            <div className="space-y-3">
-              <LanguageSwitch lang={lang} label={tr(lang, "top_language")} />
-              {locationChip}
+            <div className="flex h-full items-center gap-2 px-3 sm:gap-3 sm:px-4">
+              <MobileMenu items={[...nav, ...extras]} openLabel={tr(lang, "top_menu_open")} closeLabel={tr(lang, "top_menu_close")} />
+              <Link href={showDashboard(user) ? "/dashboard" : "/"} className="flex shrink-0 items-center gap-2.5" aria-label="SETMI INDIA, home">
+                <Image src="/brand/setmi-round-192.png" alt="" width={44} height={44} priority className="h-11 w-11" />
+                <span className="hidden leading-tight sm:block">
+                  <span className="block text-xl font-extrabold tracking-tight">
+                    <span className="bg-gradient-to-r from-[#0b7fb0] to-[#12b5c9] bg-clip-text text-transparent">SETMI</span>{" "}
+                    <span className="text-[#16a34a]">INDIA</span>
+                  </span>
+                  <span className="block text-[11px] font-medium text-muted">Engineered for the Extraordinary.</span>
+                </span>
+              </Link>
+              <CollapseButton label={tr(lang, "top_collapse")} />
+              <div className="flex min-w-0 flex-1 justify-center px-1 md:px-4">
+                <CommandPalette entries={paletteEntries} canSearchItems={can(user, "items.view")} labels={paletteLabels} />
+              </div>
+              <ThemeToggle lightLabel={tr(lang, "theme_to_light")} darkLabel={tr(lang, "theme_to_dark")} />
+              <NotificationBell count={lowCount} label={tr(lang, "top_notifications")} text={lowCount > 0 ? `${lowCount} ${tr(lang, "top_low_alert")}` : tr(lang, "top_no_alert")} />
+              <HelpButton label={tr(lang, "top_help")} />
+              <UserMenu
+                name={displayName}
+                email={user.email}
+                role={user.isAdmin ? tr(lang, "top_role_admin") : tr(lang, "top_role_staff")}
+                signOut={tr(lang, "top_signout")}
+              >
+                <div className="space-y-3">
+                  <LanguageSwitch lang={lang} label={tr(lang, "top_language")} />
+                  {locationChip}
+                </div>
+              </UserMenu>
             </div>
-          </UserMenu>
-        </div>
-      </header>
-
-      <div className="lg:flex">
-        <SidebarColumn>
-          <NavLinks items={nav} />
-        </SidebarColumn>
-        <div className="min-w-0 flex-1">
-          <div className="mx-auto max-w-[1400px] px-4 py-6 pb-24 lg:pb-8 print:p-0">
-            {/* Central guard: an inactive account never reaches any page content. */}
-            {user.isActive ? (
-              children
-            ) : (
-              <p role="status" className="rounded-xl border border-amber-400 bg-amber-50 p-4 text-amber-900">
-                {tr(lang, "top_inactive")}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-      <BottomBar items={bottomPool.filter((n) => !n.soon)} />
-    </div>
-  );
-}
+          </header>
+    ),
+    nav,
+    bottomItems: bottomPool.filter((n) => !n.soon),
+  };
+});

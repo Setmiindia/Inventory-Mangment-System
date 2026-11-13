@@ -2,7 +2,7 @@
 
 Internal company system for SETMI INDIA, a retail/trading business that buys finished electronic goods (cables, connectors, plugs, sockets, adapters) from Indian (LOCAL) and overseas (IMPORT) suppliers and sells them to customers.
 
-**Status:** built and tested on a development database; NOT deployed yet. The current state, what is verified and what is not, is always in [docs/HANDOVER.md](docs/HANDOVER.md). Deployment plan: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+**Status:** LIVE at https://inventory.setmiindia.com (Hostinger). Database: the central Supabase project, owned by the `setmi-central-db` repository. The current state, what is verified and what is not, is always in [docs/HANDOVER.md](docs/HANDOVER.md). Deployment plan: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## What is built
 
@@ -29,7 +29,7 @@ Not built (shown as "Not built yet" on screen): tax / GST calculation, e-mail no
 
 ```text
 frontend/   Next.js app (pages, forms, server actions). Its own package.json. Port 3000.
-supabase/   Database source: migrations/, tests/, seed/. Supabase is the backend (login, database, Row Level Security).
+(the database lives in the separate repository setmi-central-db)
 docs/       Documentation. CLAUDE.md and AGENTS.md are the rules for AI sessions.
 ```
 
@@ -50,7 +50,7 @@ In `frontend/`:
 npm run dev | lint | typecheck | build | start | test
 ```
 
-Database tests are SQL scripts in `supabase/tests/` (see `docs/TESTING.md`). Database changes are the files in `supabase/migrations/`, applied in file-name order. On Windows PowerShell, if `npm` is blocked by the execution policy, use `npm.cmd`.
+Database tests and migrations are in the `setmi-central-db` repository (see its README). On Windows PowerShell, if `npm` is blocked by the execution policy, use `npm.cmd`.
 
 ## Environment variables
 
@@ -60,6 +60,7 @@ Frontend: only two, both public by design: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_
 
 - [CLAUDE.md](CLAUDE.md): rules for AI sessions
 - [docs/HANDOVER.md](docs/HANDOVER.md): current state and next task
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): how to go live
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DATA.md](docs/DATA.md), [docs/DECISIONS.md](docs/DECISIONS.md), [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)
-- [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md), [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md), [docs/TESTING.md](docs/TESTING.md), [docs/ROLLBACK.md](docs/ROLLBACK.md)
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): how it is deployed and released
+- `docs/archive/`: old history (older notes, feature write-ups, references); not current
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/DECISIONS.md](docs/DECISIONS.md), [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md)
+- [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md), [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md), [docs/ROLLBACK.md](docs/ROLLBACK.md)

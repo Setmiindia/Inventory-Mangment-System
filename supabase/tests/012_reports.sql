@@ -7,7 +7,7 @@ declare
   res text := ''; cnt int; q numeric; tot numeric; n2 numeric; v_cash numeric; v_upi numeric; bl bigint; lastd date;
 begin
   insert into auth.users (id, email) values (adm,'a@t.l'),(r1,'r1@t.l'),(nr,'nr@t.l'),(ns,'ns@t.l'),(o,'o@t.l');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (adm,r1,nr,ns,o) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (adm,r1,nr,ns,o);
   update inventory.user_access set is_active = true where user_id in (adm,r1,nr,ns,o);
   update inventory.user_access set is_admin = true where user_id = adm;
   insert into inventory.user_permissions (user_id, permission_key) values

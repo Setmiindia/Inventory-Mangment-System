@@ -5,7 +5,7 @@ declare
   wh uuid; s_imp uuid; s_loc uuid; i1 uuid; i2 uuid; po1 uuid; po2 uuid; po3 uuid; r jsonb; res text := ''; pg jsonb;
 begin
   insert into auth.users (id, email) values (adm,'a@t.l'),(viewer,'v@t.l'),(nobody,'n@t.l');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (adm, viewer, nobody) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (adm, viewer, nobody);
   update inventory.user_access set is_active = true where user_id in (adm, viewer, nobody);
   update inventory.user_access set is_admin = true where user_id = adm;
   insert into inventory.user_permissions (user_id, permission_key) values (viewer, 'purchase.view');

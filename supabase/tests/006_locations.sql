@@ -6,7 +6,7 @@ declare
   res text := ''; wh uuid; sh uuid; n int; ub uuid; cb uuid;
 begin
   insert into auth.users (id, email) values (adm,'adm@t.local'),(mg,'mg@t.local'),(shopu,'shop@t.local'),(nob,'nob@t.local');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (adm, mg, shopu, nob) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (adm, mg, shopu, nob);
   update inventory.user_access set is_active = true where user_id in (adm, mg, shopu, nob);
   update inventory.user_access set is_admin = true where user_id = adm;
   insert into inventory.user_permissions (user_id, permission_key) values (mg,'locations.manage'),(shopu,'items.view'),(nob,'items.view');

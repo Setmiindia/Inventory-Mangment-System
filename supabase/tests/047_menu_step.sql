@@ -3,7 +3,7 @@ do $$
 declare adm uuid := gen_random_uuid(); staff uuid := gen_random_uuid(); res text := ''; s int;
 begin
   insert into auth.users (id, email) values (adm,'adm47@c.l'),(staff,'staff47@c.l');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (adm, staff) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (adm, staff);
   update inventory.user_access set is_active = true where user_id in (adm, staff);
   update inventory.user_access set is_admin = true where user_id = adm;
 

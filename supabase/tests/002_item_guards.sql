@@ -6,7 +6,7 @@ declare
   res text := ''; n int; item1 uuid; cb uuid; ub uuid;
 begin
   insert into auth.users (id, email) values (a,'a@test.local'),(b,'b@test.local'),(c,'c@test.local');
-  insert into public.staff_profiles (id, full_name) select id, coalesce(email, 'x') from auth.users where id in (a, b, c) on conflict do nothing;
+  update core.profiles set is_active = true, full_name = coalesce(email, 'x') where id in (a, b, c);
   update inventory.user_access set is_active = true where user_id in (a, b, c);
   -- a: creator (view/create/edit). b: archive-only. c: other editor.
   insert into inventory.user_permissions (user_id, permission_key) values

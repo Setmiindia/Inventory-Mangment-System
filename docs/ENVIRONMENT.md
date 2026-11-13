@@ -2,13 +2,13 @@
 
 | Name | Public or secret | Where set | Purpose |
 |---|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | public | local `.env.local` (set 2026-10-24); Vercel later | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public by design | local `.env.local`; Vercel later | Supabase publishable key. Safe in the browser because RLS protects data |
+| `NEXT_PUBLIC_SUPABASE_URL` | public | local `frontend/.env.local`; hPanel > Environment variables | Supabase project URL (`https://mgqzhjvasjbbiybbbahq.supabase.co`) |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public by design | same | Supabase publishable key. Safe in the browser because RLS protects the data |
 
 No secret variable is used. A service-role key is NOT used anywhere in the code. Never write values in this file.
 
 Rules:
-- `NEXT_PUBLIC_*` variables are visible in the browser. Only non-secret values may use that prefix.
+- `NEXT_PUBLIC_*` variables are visible in the browser and are written into the app when it is built, so on Hostinger they must be set BEFORE the build.
 - The Supabase service-role key must never use `NEXT_PUBLIC_` and must never reach client code.
-- `.env*` is git-ignored (verified in `.gitignore`).
-- Use a separate Supabase project for IMS; do not reuse the CRM project.
+- `.env*` is git-ignored.
+- Local and live currently use the SAME Supabase project (`setmi-central`). Create a separate test project before doing risky work.

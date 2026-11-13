@@ -1,43 +1,44 @@
-# ARCHITECTURE
+# ARCHITECTURE (2026-11-13)
 
-## Current state (implemented; synced with the files on 2026-10-29)
-Two top-level folders: `frontend/` (Next.js App Router app, the whole system) and `supabase/` (database source: migrations, tests, seed). There is NO separate API server: the old Express `backend/` (products only, never called by the app) was removed on 2026-11-12. The database is the central Supabase project `setmi-central`, schema `inventory`; staff identity is `public.staff_profiles`, inventory access is `inventory.user_access`. Supabase gives login, Row Level Security and the database; the screens call it from the Next.js server. The database has 58 migrations (`create table` appears 52 times in them). See `docs/FLOW.md` for the request flow and `docs/HANDOVER.md` for what was built and tested.
-
+## Big picture
 ```
-frontend/src/proxy.ts                     session refresh + redirect to /login (convenience)
-frontend/src/lib/supabase/                Supabase clients (env, server, client, session-cookie)
-frontend/src/lib/auth.ts                  getCurrentUser, requireUser/Admin/Permission, can()
-frontend/src/lib/{location,settings,company,reports,csv,db-errors}.ts   shared helpers
-frontend/src/lib/{barcode,i18n,import,validation,client}/               barcode, English/Hindi, Excel import, zod schemas, browser helpers
-frontend/src/app/login, forgot-password, reset-password, auth/          sign-in, password recovery, email-link callback
-frontend/src/app/(app)/layout.tsx         signed-in shell, inactive-account guard
-frontend/src/app/(app)/<module>/          dashboard, items, suppliers, locations, customers, purchase-orders,
-                                          import-shipments, receipts, quality-check, stock, transfers, sales-orders,
-                                          picking, dispatch, returns, billing, bills, reorder, reports, help, admin
-supabase/migrations, supabase/tests, supabase/seed            database source, tests, demo data
-.github/workflows/ci.yml                  CI (frontend job)
+Browser  ->  Hostinger (Next.js app in frontend/)  ->  Supabase "setmi-central" (Postgres + Auth + Storage)
+                                                          schemas: core (shared people)  inventory  [crm, ... later]
 ```
-Cache Components is on (scaffold default), so anything reading the session sits inside `<Suspense>` (done in the `(app)` layout).
+- There is no separate API server. The Next.js server calls Supabase as the signed-in person (their token), so Row Level Security and the permission checks inside database functions apply to every call.
+- The database is owned by the repository `setmi-central-db` (migrations, SQL tests, seed). This repository holds only the website. Never put database definitions here.
 
-## Planned (NOT implemented)
-- Supabase PostgreSQL for data, Supabase Auth for company users, Supabase Storage for item images and datasheets.
-- Server-side authorization for every protected operation, plus Row Level Security.
-- Hosting on Vercel at `inventory.setmiindia.com`.
-- Separation of UI, business rules and database access.
+## Repositories
+| Repository | Holds |
+|---|---|
+| `Inventory-Mangment-System` (this one) | `frontend/` website, `docs/` |
+| `setmi-central-db` | every migration for every schema, SQL tests, seed |
 
-## Module boundaries
-- Item Master: owns product identity (codes, names, category, purchase source, images, datasheet, barcode).
-- Future, separate modules: stock receiving/outward, locations, transfers, ledger, billing, reports. Stock quantity and location are not Item Master data.
+## frontend/ layout
+```
+src/proxy.ts                       session refresh + redirect to /login (convenience only, not the security check)
+src/app/login, forgot-password, reset-password, auth/callback    sign-in, password recovery, email-link target
+src/app/(app)/layout.tsx           signed-in shell: top bar, menu, bottom bar are separate pieces; <Guard> blocks inactive users
+src/app/(app)/<module>/            one folder per screen group (items, suppliers, locations, customers, stock, ...)
+src/components/                    shared parts (page-header, streamed, setup-checklist, charts, badge, ...)
+src/lib/auth.ts                    getCurrentUser (token checked locally with getClaims), requireUser/Admin/Permission, can()
+src/lib/supabase/                  Supabase clients; default schema is `inventory`
+src/lib/validation/                zod rules, one file per area
+src/lib/i18n/                      English and Hindi texts
+tests/                             node:test unit tests (npm test)
+```
 
-## Trust boundaries (planned)
-Browser (untrusted) to Next.js server (validates and authorizes) to Supabase (RLS as second line of defence).
+## Who may do what
+1. Identity: `core.profiles` (central on/off, name, email). Inventory rights: `inventory.user_access` + `user_permissions` + `user_locations`. Usable only if both "active" flags are true.
+2. Every page and server action calls `requireUser/requirePermission` first; the database checks again (RLS and function checks). Deny by default.
+3. Secrets: only the two public Supabase values are used (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). No service-role key anywhere.
 
-Update this file when real modules, routes or services are added.
+## Page rules (so the app stays fast)
+- A page that reads the session or the database is wrapped with `streamed(...)` (`src/components/streamed.tsx`) so it streams inside `<Suspense>`.
+- Menu, top bar and bottom bar read the cached `getShell()` in parallel with the page; the page never waits for them.
+- Lists use one database function per screen (`*_page`) that returns the rows, the totals and the filter lists in one call.
 
-
-## 2026-10-27 Separated frontend and backend (owner's architecture document)
-Owner's sketch: `setmi_hostinger_frontend_backend_architecture.md`. Decisions and differences:
-- **Folders:** `frontend/` (the Next.js app, moved as it was) and `backend/` (new Express API + `supabase/` with migrations, tests, seed). `deploy/` (PM2 and Nginx files) is NOT made yet: the owner will decide hosting later.
-- **Backend rules:** every request carries the person's Supabase access token (`Authorization: Bearer`); the backend creates a client with THAT token, so Row Level Security and the permission checks inside the database functions apply. The sketch's service-role client was left out on purpose (a secret key that bypasses all database rules is not needed, and `CLAUDE.md` forbids spreading it). Permissions come from `profiles.is_admin` and `user_permissions` (the sketch used `roles(...)` tables with other names). Errors are JSON with plain messages (`401` not signed in, `403` no right, `400` bad request); never a redirect, never database text.
-- **Not taken over from the sketch:** the table and column names in its items example (`internal_code`, `name`, `is_primary`, `create_item_with_barcodes_tx`) do not exist in this database; the real ones (`internal_item_code`, `item_name`, `item_barcodes.is_generated`) are used. `middleware.ts` is NOT a fix in Next.js 16: the file is called `proxy.ts` there (it is deprecated to call it middleware), so `frontend/src/proxy.ts` stays.
-- **Migration plan (module by module, the website keeps working at each step):** 1 products (done: list, one product, create, bulk, SKU suggestion), 2 files and barcodes, 3 categories, suppliers, locations, customers, 4 purchase orders, import shipments, receipts, quality check, 5 stock (movements, transfers, adjustments, counts), 6 sales (orders, picking, dispatch, returns), 7 reports, 8 admin (users, roles, settings). Then the frontend pages switch from server actions to `apiClient` one module at a time; the old server action is deleted only after its page works on the API and the owner agrees.
+## Fixed facts that surprise people
+- Production build: `next build --webpack` + `next.config.mjs` + `postcss.config.mjs` (Hostinger's server cannot load Next's native compiler). Dev: Turbopack.
+- The ledger (`stock_movements`) and stock entries are append-only on purpose; rows cannot be deleted.
+- Stock quantity is not an Item field; it comes only from the ledger.

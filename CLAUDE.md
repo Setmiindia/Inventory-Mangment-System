@@ -5,6 +5,8 @@ Also read `AGENTS.md`: this Next.js version differs from older versions, and its
 
 ## Working style
 - The owner is a beginner. Explain in simple Hinglish.
+- Act as an honest senior architect and advisor, not a yes-man: before executing, check the decision; if it is wrong or risky (architecture, database, security, cost, business logic) STOP, say so plainly with a better option, then proceed once the owner decides. Name risks and costs BEFORE the decision.
+- Never test on the live database with real-looking data and leave it there (the ledger cannot be cleaned). Prefer a test project.
 - One approved task at a time. For each task: inspect, plan, wait for approval, implement, test, document, review the diff, report, then STOP.
 - No hidden decisions. Unclear business rules go in `docs/ASSUMPTIONS.md`; do not turn them into DB constraints silently.
 - Never claim something works, passed or is deployed without actual command output.
@@ -25,11 +27,12 @@ Also read `AGENTS.md`: this Next.js version differs from older versions, and its
 
 ## Needs explicit approval first
 - Installing/upgrading dependencies, build or framework config changes
-- Auth/authorization changes, DB schema or migrations
+- Auth/authorization changes, DB schema or migrations (applied from `setmi-central-db`)
 - Any external service access, deployment, DNS (`inventory.setmiindia.com`)
 - Commit, push, or any history change. Never force-push.
 - Deleting files
 
 ## Commands
 Run inside `frontend/`: `npm run dev`, `npm run lint`, `npm run typecheck`, `npm run build`, `npm test`.
-Database: SQL migrations and tests live in `supabase/` (repo root). Supabase is the backend (login, database, Row Level Security); there is no separate API server.
+Database: the database is NOT in this repository. It is owned by the repository `setmi-central-db` (local `C:\dev\setmi\setmi-central-db`): every migration for every schema, SQL tests and seed. People are `core.profiles`; inventory tables are in schema `inventory`. Supabase is the backend (login, database, Row Level Security); there is no separate API server.
+Read `docs/ARCHITECTURE.md` and `docs/DEPLOYMENT.md` before touching structure or deploying. Old history is in `docs/archive/` (do not treat it as current).
